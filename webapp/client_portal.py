@@ -5017,6 +5017,7 @@ _ENDPOINT_FEATURE_MAP = {
     "client_reviews_settings":     "reviews",
     "client_reviews_send":         "reviews",
     "client_reviews_run_automation": "reviews",
+    "client_reviews_process_queue": "reviews",
     "client_reviews_mark_reviewed": "reviews",
     "client_post_scheduler":       "post_scheduler",
     "schedule_post":               "post_scheduler",
@@ -12831,6 +12832,7 @@ def client_reviews():
     requests = db.get_review_requests(brand_id, limit=75)
     stats = db.get_review_request_stats(brand_id)
     autopilot = build_review_autopilot_dashboard(db, brand, current_app.config)
+    sweep_result = session.pop("review_sweep_result", None)
 
     return render_template(
         "client_reviews.html",
@@ -12842,6 +12844,7 @@ def client_reviews():
         requests=requests,
         stats=stats,
         autopilot=autopilot,
+        sweep_result=sweep_result,
         setup=review_setup_status(brand),
         automation=automation_settings(brand),
         templates=get_templates(brand),
@@ -12985,8 +12988,33 @@ def client_reviews_run_automation():
     if not result.get("ran"):
         flash(result.get("reason") or "Review automation did not run.", "warning")
         return redirect(url_for("client.client_reviews"))
+    session["review_sweep_result"] = {
+        "checked": result.get("checked", 0),
+        "eligible": result.get("eligible", 0),
+        "suppressed": result.get("suppressed", 0),
+        "suppressed_counts": result.get("suppressed_counts") or {},
+        "sent_sms": result.get("sent_sms", 0),
+        "sent_email": result.get("sent_email", 0),
+        "failed": result.get("failed", 0),
+        "errors": result.get("errors") or {},
+        "reason": result.get("reason") or "",
+        "sent": bool(result.get("sent")),
+    }
+    if not result.get("sent"):
+        counts = result.get("suppressed_counts") or {}
+        top_reasons = ", ".join(
+            f"{key.replace('_', ' ')}: {value}" for key, value in sorted(counts.items(), key=lambda item: item[1], reverse=True)[:3]
+        )
+        detail = f" Top blockers: {top_reasons}." if top_reasons else ""
+        flash(
+            f"Audience sweep checked {result.get('checked', 0)} recipient(s). "
+            f"{result.get('suppressed', 0)} suppressed, 0 sent.{detail}",
+            "warning",
+        )
+        return redirect(url_for("client.client_reviews"))
     flash(
-        f"Review automation sent {result.get('sent_sms', 0)} SMS and {result.get('sent_email', 0)} email request(s).",
+        f"Audience sweep checked {result.get('checked', 0)} recipient(s), found {result.get('eligible', 0)} eligible, "
+        f"and sent {result.get('sent_sms', 0)} SMS plus {result.get('sent_email', 0)} email request(s).",
         "success",
     )
     return redirect(url_for("client.client_reviews"))

@@ -124,7 +124,7 @@
         </span>
         <form method="post" action="{{ url_for('client.client_reviews_run_automation') }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <button class="btn btn-outline-success btn-sm fw-bold" type="submit" {% if not automation.enabled or not setup.ready %}disabled{% endif %}>
+            <button class="btn btn-outline-success btn-sm fw-bold" type="submit">
                 <i class="bi bi-play-circle me-1"></i> Run audience sweep now
             </button>
         </form>
@@ -137,6 +137,38 @@
         <div class="autopilot-metric"><strong>{{ autopilot.metrics.recovery }}</strong><span>Recovery issues</span></div>
     </div>
 </div>
+
+{% if sweep_result %}
+<div class="review-panel mb-3">
+    <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap">
+        <div>
+            <div class="review-panel-title mb-1"><i class="bi bi-radar"></i> Last Audience Sweep</div>
+            <div class="text-muted" style="font-size:.84rem;">
+                Checked {{ sweep_result.checked or 0 }} recipient(s), found {{ sweep_result.eligible or 0 }} eligible, suppressed {{ sweep_result.suppressed or 0 }}, sent {{ sweep_result.sent_sms or 0 }} SMS and {{ sweep_result.sent_email or 0 }} email.
+                {% if sweep_result.reason %}{{ sweep_result.reason }}{% endif %}
+            </div>
+        </div>
+        <span class="health-pill {% if sweep_result.sent %}healthy{% else %}attention{% endif %}">
+            {% if sweep_result.sent %}<i class="bi bi-check-circle"></i> Sent{% else %}<i class="bi bi-info-circle"></i> No sends{% endif %}
+        </span>
+    </div>
+    {% if sweep_result.suppressed_counts %}
+    <div class="queue-list mt-3">
+        {% for status, count in sweep_result.suppressed_counts.items() %}
+        <div class="queue-item">
+            <div class="queue-top">
+                <div class="queue-name">{{ status|replace('_', ' ')|title }}</div>
+                <span class="mini-pill">{{ count }}</span>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+    {% if sweep_result.errors %}
+    <div class="text-warning fw-semibold mt-2" style="font-size:.76rem;">{{ sweep_result.errors|length }} audience source error(s) were reported.</div>
+    {% endif %}
+</div>
+{% endif %}
 
 <div class="reviews-grid">
     <div>

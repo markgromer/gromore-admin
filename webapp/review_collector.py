@@ -550,6 +550,16 @@ def preview_review_audience(db, brand, group_keys, channels):
     }
 
 
+def _candidate_status_counts(candidates):
+    counts = {}
+    for candidate in candidates or []:
+        if candidate.get("eligible"):
+            continue
+        status = _clean(candidate.get("status")) or "suppressed"
+        counts[status] = counts.get(status, 0) + 1
+    return counts
+
+
 def build_landing_url(token, external_base_url=None):
     path = url_for("client_public.client_review_request", token=token)
     if external_base_url:
@@ -851,14 +861,69 @@ def process_review_automation(db, app_config, brand, *, created_by="automation")
     settings = automation_settings(brand)
     if not settings["enabled"]:
         return {"ran": False, "reason": "Review automation is disabled.", "sent_sms": 0, "sent_email": 0, "recipient_count": 0}
+    recipients, errors = collect_recipients(db, brand, settings["groups"])
+    recipients = recipients[:MAX_REVIEW_REQUESTS]
+    intelligence = build_review_intelligence(db, brand, recipients)
+    sweep = {
+        "checked": len(recipients),
+        "eligible": intelligence["eligible"],
+        "suppressed": intelligence["suppressed"],
+        "suppressed_counts": _candidate_status_counts(intelligence["candidates"]),
+        "errors": errors,
+        "sent_sms": 0,
+        "sent_email": 0,
+        "failed": 0,
+        "skipped": 0,
+        "recipient_count": 0,
+    }
+    if not recipients:
+        return {
+            "ran": True,
+            "sent": False,
+            "reason": "No reachable recipients matched the automation audiences.",
+            **sweep,
+        }
+    if not intelligence["eligible"]:
+        return {
+            "ran": True,
+            "sent": False,
+            "reason": "No recipients are eligible for a review request yet.",
+            **sweep,
+        }
+    setup = review_setup_status(brand)
+    if not setup["ready"]:
+        return {
+            "ran": True,
+            "sent": False,
+            "reason": "Add a Google Place ID or manual review link before WARREN can send the eligible requests.",
+            **sweep,
+        }
+    smtp_ready = bool(app_config.get("SMTP_USER") and app_config.get("SMTP_PASSWORD"))
+    if "sms" in settings["channels"] and not setup["sms_ready"]:
+        return {
+            "ran": True,
+            "sent": False,
+            "reason": "SMS is selected for review automation, but SMS is not configured for this brand.",
+            **sweep,
+        }
+    if "email" in settings["channels"] and not smtp_ready:
+        return {
+            "ran": True,
+            "sent": False,
+            "reason": "Email is selected for review automation, but SMTP is not configured.",
+            **sweep,
+        }
+    delivery = send_review_requests(
+        db,
+        app_config,
+        brand,
+        group_keys=settings["groups"],
+        channels=settings["channels"],
+        created_by=created_by,
+    )
     return {
         "ran": True,
-        **send_review_requests(
-            db,
-            app_config,
-            brand,
-            group_keys=settings["groups"],
-            channels=settings["channels"],
-            created_by=created_by,
-        ),
+        "sent": True,
+        **sweep,
+        **delivery,
     }
