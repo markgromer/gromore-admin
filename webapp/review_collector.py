@@ -936,8 +936,6 @@ def maybe_create_review_recovery_task(db, brand, review_request):
 
 def process_review_automation(db, app_config, brand, *, created_by="automation"):
     settings = automation_settings(brand)
-    if not settings["enabled"]:
-        return {"ran": False, "reason": "Review automation is disabled.", "sent_sms": 0, "sent_email": 0, "recipient_count": 0}
     recipients, errors = collect_recipients(db, brand, settings["groups"])
     recipients = recipients[:MAX_REVIEW_REQUESTS]
     intelligence = build_review_intelligence(db, brand, recipients, enrich_missing_dates=True)
@@ -956,6 +954,13 @@ def process_review_automation(db, app_config, brand, *, created_by="automation")
         "skipped": 0,
         "recipient_count": 0,
     }
+    if not settings["enabled"]:
+        return {
+            "ran": True,
+            "sent": False,
+            "reason": "Review Autopilot is paused. The sweep still checked the audience, but WARREN did not send any review requests.",
+            **sweep,
+        }
     if not recipients:
         return {
             "ran": True,
