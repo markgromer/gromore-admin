@@ -95,6 +95,88 @@ def _facebook_organic_has_signal(payload):
     return isinstance(top_posts, list) and len(top_posts) > 0
 
 
+def _month_is_current(month):
+    try:
+        return datetime.strptime(month, "%Y-%m").strftime("%Y-%m") == datetime.now().strftime("%Y-%m")
+    except (TypeError, ValueError):
+        return False
+
+
+def _merge_crm_revenue(existing, incoming):
+    existing = existing if isinstance(existing, dict) else {}
+    incoming = incoming if isinstance(incoming, dict) else {}
+    existing_totals = dict(existing.get("totals") or {})
+    incoming_totals = dict(incoming.get("totals") or {})
+
+    merged_totals = dict(existing_totals)
+    for key in ("revenue", "closed_deals", "leads", "lead_count", "new_leads", "new_clients", "requests", "invoices"):
+        current = merged_totals.get(key)
+        candidate = incoming_totals.get(key)
+        try:
+            current_num = float(current or 0)
+            candidate_num = float(candidate or 0)
+            merged_totals[key] = max(current_num, candidate_num)
+        except (TypeError, ValueError):
+            if candidate not in (None, ""):
+                merged_totals[key] = candidate
+
+    merged = dict(existing)
+    merged.update({k: v for k, v in incoming.items() if k != "totals" and v not in (None, "", {})})
+    merged["totals"] = merged_totals
+    if existing and incoming:
+        merged["source"] = incoming.get("source") or existing.get("source") or "crm"
+    return merged
+
+
+def _attach_crm_revenue_data(db, brand, month, data, *, allow_live=False):
+    finance = db.get_brand_month_finance(brand["id"], month)
+    crm_payload = {}
+    if finance and (finance.get("closed_revenue") or finance.get("closed_deals")):
+        crm_payload = {
+            "source": "monthly_finance",
+            "totals": {
+                "revenue": float(finance.get("closed_revenue") or 0),
+                "closed_deals": int(finance.get("closed_deals") or 0),
+                "leads": int(finance.get("closed_deals") or 0),
+            },
+            "notes": finance.get("notes", ""),
+            "updated_at": finance.get("updated_at", ""),
+        }
+
+    crm_type = (brand.get("crm_type") or "").strip().lower()
+    if allow_live and crm_type in {"jobber", "gohighlevel", "razorsync", "sweepandgo"} and brand.get("crm_api_key"):
+        try:
+            from webapp.crm_bridge import pull_crm_activity_snapshot
+            live_payload, live_error = pull_crm_activity_snapshot(brand, month)
+            if live_payload:
+                crm_payload = _merge_crm_revenue(crm_payload, live_payload)
+                totals = crm_payload.get("totals") or {}
+                if totals.get("revenue") or totals.get("closed_deals"):
+                    db.upsert_brand_month_finance(
+                        brand["id"],
+                        month,
+                        totals.get("revenue") or 0,
+                        totals.get("closed_deals") or 0,
+                        f"{crm_type.title()} activity sync",
+                    )
+            elif live_error:
+                crm_payload = _merge_crm_revenue(crm_payload, {
+                    "source": crm_type,
+                    "totals": {},
+                    "diagnostics": {"warning": live_error},
+                })
+        except Exception as exc:
+            crm_payload = _merge_crm_revenue(crm_payload, {
+                "source": crm_type,
+                "totals": {},
+                "diagnostics": {"warning": str(exc)[:200]},
+            })
+
+    if crm_payload and crm_payload.get("totals"):
+        data["crm_revenue"] = _merge_crm_revenue(data.get("crm_revenue"), crm_payload)
+    return data
+
+
 def _attach_gbp_context(db, brand, analysis):
     """Attach Google Business Profile audit context when available."""
     if not isinstance(analysis, dict):
@@ -179,17 +261,8 @@ def build_analysis_and_suggestions_for_brand(db, brand, month):
         except Exception as e:
             api_errors.append(f"API bridge error: {str(e)}")
 
-    # Add monthly CRM/offline revenue input (for true ROAS)
-    finance = db.get_brand_month_finance(brand["id"], month)
-    if finance and (finance.get("closed_revenue") or finance.get("closed_deals")):
-        data["crm_revenue"] = {
-            "totals": {
-                "revenue": float(finance.get("closed_revenue") or 0),
-                "closed_deals": int(finance.get("closed_deals") or 0),
-            },
-            "notes": finance.get("notes", ""),
-            "updated_at": finance.get("updated_at", ""),
-        }
+    # Add monthly CRM/offline revenue and lead activity input.
+    _attach_crm_revenue_data(db, brand, month, data, allow_live=True)
 
     if not data:
         error_detail = "No data available."
@@ -253,6 +326,7 @@ def get_analysis_and_suggestions_for_brand(db, brand, month, *, force_refresh: b
                 except Exception:
                     pass
 
+                _attach_crm_revenue_data(db, brand, month, data, allow_live=_month_is_current(month))
                 analysis = build_full_analysis(slug, month, data, client_config)
                 _attach_gbp_context(db, brand, analysis)
                 suggestions = generate_suggestions(analysis)
@@ -307,6 +381,7 @@ def get_analysis_and_suggestions_for_brand(db, brand, month, *, force_refresh: b
                 except Exception:
                     pass
 
+                _attach_crm_revenue_data(db, brand, month, data, allow_live=_month_is_current(month))
                 analysis = build_full_analysis(slug, month, data, client_config)
                 _attach_gbp_context(db, brand, analysis)
                 suggestions = generate_suggestions(analysis)

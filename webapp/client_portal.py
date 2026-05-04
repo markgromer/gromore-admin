@@ -5209,7 +5209,7 @@ def _consume_login_refresh_month(session_key: str, month: str) -> bool:
 
 
 _CAMPAIGNS_CACHE_TTL_SECONDS = 6 * 60 * 60
-_DASHBOARD_SNAPSHOT_VERSION = 3
+_DASHBOARD_SNAPSHOT_VERSION = 4
 
 
 def _campaigns_cache_key(brand_id: int, month: str) -> str:
@@ -18312,17 +18312,15 @@ def client_crm_data():
         count = 0
         source = payment_provider if has_payment_revenue_source and not has_crm_revenue_source else crm_type
         error = None
+        crm_activity_payload = {}
 
         if do_sync:
-            if crm_type == "jobber":
-                from webapp.crm_bridge import pull_jobber_revenue
-                revenue, count, error = pull_jobber_revenue(brand, month)
-            elif crm_type == "gohighlevel":
-                from webapp.crm_bridge import pull_gohighlevel_revenue
-                revenue, count, error = pull_gohighlevel_revenue(brand, month)
-            elif crm_type == "razorsync":
-                from webapp.crm_bridge import pull_razorsync_revenue
-                revenue, count, error = pull_razorsync_revenue(brand, month)
+            if crm_type in {"jobber", "gohighlevel", "razorsync"}:
+                from webapp.crm_bridge import pull_crm_activity_snapshot
+                crm_activity_payload, error = pull_crm_activity_snapshot(brand, month)
+                totals = (crm_activity_payload or {}).get("totals") or {}
+                revenue = float(totals.get("revenue") or 0)
+                count = int(totals.get("closed_deals") or totals.get("leads") or 0)
             elif has_payment_revenue_source:
                 from webapp.crm_bridge import pull_payment_provider_revenue
                 revenue, count, error = pull_payment_provider_revenue(brand, month)
@@ -18347,6 +18345,7 @@ def client_crm_data():
                 "status": "available" if revenue or count else "limited",
                 "message": f"{source.title()} revenue sync is available. Use Sync Revenue to refresh this month.",
             },
+            "crm_activity": crm_activity_payload,
         }
         data["crm_snapshot"] = {
             "title": f"{source.title()} revenue",

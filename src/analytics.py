@@ -173,6 +173,26 @@ def _build_lead_pacing(month, target_leads, actual_leads, today=None):
     return pacing
 
 
+def _crm_totals(crm_revenue):
+    totals = (crm_revenue or {}).get("totals") or {}
+    crm_leads = max(
+        _to_float(totals.get("leads"), 0.0),
+        _to_float(totals.get("lead_count"), 0.0),
+        _to_float(totals.get("new_leads"), 0.0),
+        _to_float(totals.get("requests"), 0.0),
+        _to_float(totals.get("new_clients"), 0.0),
+        _to_float(totals.get("closed_deals"), 0.0),
+    )
+    return {
+        "revenue": _to_float(totals.get("revenue"), 0.0),
+        "closed_deals": _to_float(totals.get("closed_deals"), 0.0),
+        "crm_leads": round(crm_leads, 2),
+        "new_clients": _to_float(totals.get("new_clients"), 0.0),
+        "requests": _to_float(totals.get("requests"), 0.0),
+        "source": (crm_revenue or {}).get("source") or totals.get("source") or "",
+    }
+
+
 def _parse_competitors(raw_competitors):
     if not raw_competitors:
         return []
@@ -883,7 +903,8 @@ def build_full_analysis(client_id, month, current_data, client_config):
         roas_data["cost_per_conversion"] = round(total_spend / total_conversions, 2)
 
     crm_revenue = current_data.get("crm_revenue") or {}
-    attributed_revenue = _to_float((crm_revenue.get("totals") or {}).get("revenue"), 0.0)
+    crm = _crm_totals(crm_revenue)
+    attributed_revenue = crm["revenue"]
     blended_roas = round(attributed_revenue / total_spend, 2) if total_spend > 0 and attributed_revenue > 0 else None
     if attributed_revenue > 0:
         roas_data["attributed_revenue"] = round(attributed_revenue, 2)
@@ -897,7 +918,10 @@ def build_full_analysis(client_id, month, current_data, client_config):
 
     paid_spend = round(total_spend, 2)
     paid_leads = round(meta_results + google_ads_results, 2)
-    blended_cpa = round((paid_spend / paid_leads), 2) if paid_spend > 0 and paid_leads > 0 else None
+    crm_leads = round(crm["crm_leads"], 2)
+    total_leads = round(max(paid_leads, crm_leads), 2)
+    lead_source = "crm" if crm_leads > paid_leads else "paid_platforms"
+    blended_cpa = round((paid_spend / total_leads), 2) if paid_spend > 0 and total_leads > 0 else None
 
     kpi_status = {
         "targets": {
@@ -908,6 +932,12 @@ def build_full_analysis(client_id, month, current_data, client_config):
         "actual": {
             "paid_spend": paid_spend,
             "paid_leads": paid_leads,
+            "crm_leads": crm_leads,
+            "total_leads": total_leads,
+            "lead_source": lead_source,
+            "closed_deals": round(crm["closed_deals"], 2),
+            "new_clients": round(crm["new_clients"], 2),
+            "crm_requests": round(crm["requests"], 2),
             "blended_cpa": blended_cpa,
             "attributed_revenue": round(attributed_revenue, 2),
             "blended_roas": blended_roas,
@@ -934,13 +964,16 @@ def build_full_analysis(client_id, month, current_data, client_config):
             )
 
     if target_leads > 0:
-        lead_pacing = _build_lead_pacing(month, target_leads, paid_leads)
+        lead_pacing = _build_lead_pacing(month, target_leads, total_leads)
         comparison_target = lead_pacing.get("expected_to_date") if lead_pacing else target_leads
-        lead_gap_pct = round(((paid_leads - comparison_target) / comparison_target) * 100, 1) if comparison_target else None
-        leads_on_track = bool(lead_pacing.get("on_track")) if lead_pacing else paid_leads >= target_leads
+        lead_gap_pct = round(((total_leads - comparison_target) / comparison_target) * 100, 1) if comparison_target else None
+        leads_on_track = bool(lead_pacing.get("on_track")) if lead_pacing else total_leads >= target_leads
         kpi_status["evaluation"]["leads"] = {
             "target": target_leads,
-            "actual": paid_leads,
+            "actual": total_leads,
+            "paid_actual": paid_leads,
+            "crm_actual": crm_leads,
+            "source": lead_source,
             "gap_pct": lead_gap_pct,
             "on_track": leads_on_track,
             "expected_to_date": lead_pacing.get("expected_to_date") if lead_pacing else None,
@@ -956,19 +989,19 @@ def build_full_analysis(client_id, month, current_data, client_config):
             pace_label = (lead_pacing.get("label") or "On pace").lower()
             if leads_on_track:
                 all_highlights.append(
-                    f"Paid leads are {paid_leads} against a paced target of {expected_to_date} by day {lead_pacing.get('elapsed_days')} ({pace_label})"
+                    f"Total leads are {total_leads} against a paced target of {expected_to_date} by day {lead_pacing.get('elapsed_days')} ({pace_label})"
                 )
             else:
                 all_concerns.append(
-                    f"Paid leads are {paid_leads} against a paced target of {expected_to_date} by day {lead_pacing.get('elapsed_days')} ({pace_label})"
+                    f"Total leads are {total_leads} against a paced target of {expected_to_date} by day {lead_pacing.get('elapsed_days')} ({pace_label})"
                 )
         elif leads_on_track:
             all_highlights.append(
-                f"Paid leads are {paid_leads} vs target {target_leads} (+{lead_gap_pct}%)"
+                f"Total leads are {total_leads} vs target {target_leads} (+{lead_gap_pct}%)"
             )
         else:
             all_concerns.append(
-                f"Paid leads are {paid_leads} vs target {target_leads} ({abs(lead_gap_pct)}% below target)"
+                f"Total leads are {total_leads} vs target {target_leads} ({abs(lead_gap_pct)}% below target)"
             )
 
     if target_roas > 0:
@@ -1011,6 +1044,9 @@ def build_full_analysis(client_id, month, current_data, client_config):
         },
         "total_paid_spend": paid_spend,
         "total_paid_leads": paid_leads,
+        "crm_leads": crm_leads,
+        "total_leads": total_leads,
+        "lead_source": lead_source,
         "blended_cpa": blended_cpa,
     }
 
@@ -1045,6 +1081,7 @@ def build_full_analysis(client_id, month, current_data, client_config):
         "overall_score": overall_score,
         "overall_grade": overall_grade,
         "roas": roas_data,
+        "crm_revenue": crm_revenue,
         "paid_summary": paid_summary,
         "kpi_status": kpi_status,
         "competitor_watch": competitor_watch,

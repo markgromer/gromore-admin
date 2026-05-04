@@ -2260,26 +2260,33 @@ def _explain_kpis(analysis):
             ),
         })
 
-    if targets.get("leads") and actual.get("paid_leads") is not None:
+    lead_actual = actual.get("total_leads")
+    if lead_actual is None:
+        lead_actual = actual.get("paid_leads")
+
+    if targets.get("leads") and lead_actual is not None:
         leads_eval = evaluation.get("leads", {})
         on_track = leads_eval.get("on_track", False)
         expected_to_date = leads_eval.get("expected_to_date")
         is_current_month = leads_eval.get("is_current_month", False)
         pace_label = leads_eval.get("pace_label") or ("On pace" if on_track else "Behind pace")
         elapsed_days = leads_eval.get("elapsed_days")
+        lead_source = str(actual.get("lead_source") or leads_eval.get("source") or "").replace("_", " ")
+        source_note = f" Source: {lead_source}." if lead_source and lead_source != "paid platforms" else ""
         cards.append({
             "label": "Total Leads",
             "target": f"{int(targets['leads'])}",
-            "actual": f"{int(actual['paid_leads'])}",
+            "actual": f"{int(lead_actual)}",
             "on_track": on_track,
             "status_label": pace_label,
             "explanation": (
                 (
-                    f"You have {int(actual['paid_leads'])} leads against a monthly target of {int(targets['leads'])}. "
+                    f"You have {int(lead_actual)} leads against a monthly target of {int(targets['leads'])}. "
                     f"By day {int(elapsed_days or 0)}, the paced target is {expected_to_date:.1f}, so you're {pace_label.lower()}."
                     if is_current_month and expected_to_date is not None
-                    else f"Target is {int(targets['leads'])} leads and you got {int(actual['paid_leads'])}. "
+                    else f"Target is {int(targets['leads'])} leads and you got {int(lead_actual)}. "
                 )
+                + source_note
                 + (
                     " Keep spend stable and focus on lead quality before making major changes."
                     if on_track and is_current_month
@@ -2310,9 +2317,13 @@ def _explain_kpis(analysis):
     if not cards:
         paid_spend = _to_float(actual.get("paid_spend"), 0)
         paid_leads = _to_float(actual.get("paid_leads"), 0)
+        total_leads = _to_float(actual.get("total_leads"), paid_leads)
+        crm_leads = _to_float(actual.get("crm_leads"), 0)
         blended_cpa = actual.get("blended_cpa")
-        if paid_spend > 0 or paid_leads > 0:
-            actual_parts = [f"${paid_spend:,.2f} spend", f"{paid_leads:.0f} paid leads"]
+        if paid_spend > 0 or total_leads > 0:
+            actual_parts = [f"${paid_spend:,.2f} spend", f"{total_leads:.0f} total leads"]
+            if crm_leads > paid_leads:
+                actual_parts.append(f"{crm_leads:.0f} from CRM")
             if blended_cpa:
                 actual_parts.append(f"${float(blended_cpa):.2f} blended CPL")
             cards.append({
@@ -2346,12 +2357,12 @@ def _build_health_summary(analysis, actions, overall_grade, overall_score):
     numbers = []
 
     if leads_eval:
-        paid_leads = int(actual.get("paid_leads") or 0)
+        lead_count = int(actual.get("total_leads") if actual.get("total_leads") is not None else (actual.get("paid_leads") or 0))
         target_leads = int(targets.get("leads") or 0)
         expected_to_date = leads_eval.get("expected_to_date")
         pace_status = leads_eval.get("pace_status") or "full_month"
 
-        numbers.append(f"{paid_leads} leads so far")
+        numbers.append(f"{lead_count} leads so far")
         if target_leads:
             numbers.append(f"{target_leads} target this month")
         if expected_to_date is not None and leads_eval.get("is_current_month"):
@@ -2361,35 +2372,35 @@ def _build_health_summary(analysis, actions, overall_grade, overall_score):
             tone = "positive"
             label = "Ahead of pace"
             summary = (
-                f"The numbers say lead volume is running ahead of plan. You have {paid_leads} leads so far, "
+                f"The numbers say lead volume is running ahead of plan. You have {lead_count} leads so far, "
                 f"which is above the paced target of {expected_to_date:.1f} for this point in the month."
             )
         elif pace_status == "on_track":
             tone = "good"
             label = "On pace"
             summary = (
-                f"The numbers say lead volume is on track. You have {paid_leads} leads so far against a paced target of {expected_to_date:.1f}."
+                f"The numbers say lead volume is on track. You have {lead_count} leads so far against a paced target of {expected_to_date:.1f}."
             )
         elif pace_status == "watch":
             tone = "caution"
             label = "Watch closely"
             summary = (
-                f"The numbers say lead flow is a little behind pace. You have {paid_leads} leads so far against a paced target of {expected_to_date:.1f}."
+                f"The numbers say lead flow is a little behind pace. You have {lead_count} leads so far against a paced target of {expected_to_date:.1f}."
             )
         elif pace_status == "at_risk":
             tone = "warning"
             label = "Needs attention"
             summary = (
-                f"The numbers say lead flow is behind pace. You have {paid_leads} leads so far against a paced target of {expected_to_date:.1f}."
+                f"The numbers say lead flow is behind pace. You have {lead_count} leads so far against a paced target of {expected_to_date:.1f}."
             )
         elif leads_eval.get("on_track"):
             tone = "good"
             label = "On target"
-            summary = f"The numbers say you are hitting your lead target with {paid_leads} leads against a goal of {target_leads}."
+            summary = f"The numbers say you are hitting your lead target with {lead_count} leads against a goal of {target_leads}."
         else:
             tone = "warning"
             label = "Off target"
-            summary = f"The numbers say you are below your lead target with {paid_leads} leads against a goal of {target_leads}."
+            summary = f"The numbers say you are below your lead target with {lead_count} leads against a goal of {target_leads}."
     elif cpa_eval and cpa_eval.get("on_track") is not None:
         tone = "good" if cpa_eval.get("on_track") else "warning"
         label = "Efficient" if cpa_eval.get("on_track") else "Needs attention"
@@ -2633,14 +2644,18 @@ def _build_kpi_cluster_card(dashboard, health_summary):
 
     primary_metric = "No KPI target is connected yet"
     if leads_eval:
-        primary_metric = f"{int(actual.get('paid_leads') or 0)} leads vs {int(targets.get('leads') or 0)} target"
+        lead_count = int(actual.get("total_leads") if actual.get("total_leads") is not None else (actual.get("paid_leads") or 0))
+        primary_metric = f"{lead_count} leads vs {int(targets.get('leads') or 0)} target"
     elif cpa_eval and cpa_eval.get("actual") is not None and cpa_eval.get("target") is not None:
         primary_metric = f"${float(cpa_eval.get('actual') or 0):.2f} CPL vs ${float(cpa_eval.get('target') or 0):.2f} target"
-    elif _to_float(actual.get("paid_spend"), 0) > 0 or _to_float(actual.get("paid_leads"), 0) > 0:
+    elif _to_float(actual.get("paid_spend"), 0) > 0 or _to_float(actual.get("total_leads", actual.get("paid_leads")), 0) > 0:
         paid_spend = _to_float(actual.get("paid_spend"), 0)
         paid_leads = _to_float(actual.get("paid_leads"), 0)
+        crm_leads = _to_float(actual.get("crm_leads"), 0)
+        total_leads = _to_float(actual.get("total_leads"), _to_float(actual.get("paid_leads"), 0))
         blended_cpa = actual.get("blended_cpa")
-        primary_metric = f"${paid_spend:,.0f} spend, {paid_leads:.0f} paid leads"
+        lead_label = "total leads" if crm_leads > paid_leads else "paid leads"
+        primary_metric = f"${paid_spend:,.0f} spend, {total_leads:.0f} {lead_label}"
         if blended_cpa:
             primary_metric += f", ${float(blended_cpa):.2f} CPL"
     elif health_summary.get("grade"):

@@ -2481,6 +2481,7 @@ def pull_jobber_revenue(brand, month=None):
     if not month:
         from datetime import datetime
         month = datetime.now().strftime("%Y-%m")
+    _month_prefix, start, end = _month_bounds(month)
 
     query = """
     query Invoices($filter: InvoiceFilterAttributes) {
@@ -2499,8 +2500,8 @@ def pull_jobber_revenue(brand, month=None):
         "filter": {
             "status": "paid",
             "createdAtRange": {
-                "from": f"{month}-01",
-                "to": f"{month}-31",
+                "from": start.strftime("%Y-%m-%d"),
+                "to": (end - timedelta(days=1)).strftime("%Y-%m-%d"),
             },
         }
     }
@@ -2521,6 +2522,129 @@ def pull_jobber_revenue(brand, month=None):
             pass
 
     return total_revenue, len(nodes), None
+
+
+def _jobber_count_created_records(brand, collection, month):
+    """Best-effort count of Jobber records created during a month."""
+    _month_prefix, start, end = _month_bounds(month)
+    query = f"""
+    query JobberCreatedRecords($first: Int!, $after: String) {{
+        {collection}(first: $first, after: $after) {{
+            nodes {{
+                id
+                createdAt
+            }}
+            pageInfo {{
+                hasNextPage
+                endCursor
+            }}
+        }}
+    }}
+    """
+    count = 0
+    scanned = 0
+    after = None
+    for _page in range(10):
+        result, error = _jobber_graphql(brand, query, {"first": 100, "after": after})
+        if error:
+            return 0, scanned, error
+        payload = (result or {}).get(collection) or {}
+        nodes = payload.get("nodes") or []
+        scanned += len(nodes)
+        for node in nodes:
+            created = _parse_razorsync_date((node or {}).get("createdAt"))
+            if created and start <= created < end:
+                count += 1
+        page_info = payload.get("pageInfo") or {}
+        if not page_info.get("hasNextPage"):
+            break
+        after = page_info.get("endCursor")
+        if not after:
+            break
+    return count, scanned, None
+
+
+def pull_jobber_activity_snapshot(brand, month=None):
+    """Pull Jobber activity for KPI reporting.
+
+    Revenue remains invoice-based, while leads use requests/clients as the CRM
+    source of truth when ad-platform conversion tracking is missing.
+    """
+    if not month:
+        month = datetime.now().strftime("%Y-%m")
+
+    revenue, invoice_count, revenue_error = pull_jobber_revenue(brand, month)
+    new_clients, clients_scanned, client_error = _jobber_count_created_records(brand, "clients", month)
+    new_requests, requests_scanned, request_error = _jobber_count_created_records(brand, "requests", month)
+
+    errors = [err for err in (revenue_error, client_error, request_error) if err]
+    if revenue_error and client_error and request_error:
+        return {}, "; ".join(errors)
+
+    leads = max(new_requests, new_clients, invoice_count)
+    return {
+        "source": "jobber",
+        "totals": {
+            "revenue": round(revenue or 0, 2),
+            "closed_deals": int(invoice_count or 0),
+            "leads": int(leads or 0),
+            "new_clients": int(new_clients or 0),
+            "requests": int(new_requests or 0),
+            "invoices": int(invoice_count or 0),
+        },
+        "diagnostics": {
+            "clients_scanned": clients_scanned,
+            "requests_scanned": requests_scanned,
+            "warnings": errors,
+        },
+        "synced_at": datetime.utcnow().isoformat(),
+    }, None
+
+
+def pull_crm_activity_snapshot(brand, month=None):
+    crm_type = (brand.get("crm_type") or "").strip().lower()
+    if crm_type == "jobber":
+        return pull_jobber_activity_snapshot(brand, month)
+    if crm_type == "gohighlevel":
+        revenue, count, error = pull_gohighlevel_revenue(brand, month)
+        if error:
+            return {}, error
+        return {
+            "source": "gohighlevel",
+            "totals": {
+                "revenue": round(revenue or 0, 2),
+                "closed_deals": int(count or 0),
+                "leads": int(count or 0),
+            },
+            "synced_at": datetime.utcnow().isoformat(),
+        }, None
+    if crm_type == "razorsync":
+        revenue, count, error = pull_razorsync_revenue(brand, month)
+        if error:
+            return {}, error
+        return {
+            "source": "razorsync",
+            "totals": {
+                "revenue": round(revenue or 0, 2),
+                "closed_deals": int(count or 0),
+                "leads": int(count or 0),
+            },
+            "synced_at": datetime.utcnow().isoformat(),
+        }, None
+    if crm_type == "sweepandgo":
+        revenue, count, error = pull_sweepandgo_revenue(brand, month)
+        if error:
+            return {}, error
+        return {
+            "source": "sweepandgo",
+            "totals": {
+                "revenue": round(revenue or 0, 2),
+                "closed_deals": int(count or 0),
+                "leads": int(count or 0),
+            },
+            "synced_at": datetime.utcnow().isoformat(),
+        }, None
+    return {}, "CRM activity sync is not supported for this CRM type yet."
 
 
 # ── GoHighLevel Revenue Pull ──────────────────────────────────

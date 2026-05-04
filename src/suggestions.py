@@ -1154,7 +1154,7 @@ def _target_kpi_suggestions(analysis):
     if isinstance(leads_eval, dict) and leads_eval.get("on_track") is False:
         suggestions.append(make_suggestion(
             "Recover Lead Volume to Target",
-            f"Paid leads are {leads_eval.get('actual')} vs target {leads_eval.get('target')}. "
+            f"Total leads are {leads_eval.get('actual')} vs target {leads_eval.get('target')}. "
             "Increase impression share in high-intent campaigns and launch 1-2 new offer variants "
             "to improve click-to-lead conversion.",
             PRIORITY_HIGH, CATEGORY_STRATEGY, "growth",

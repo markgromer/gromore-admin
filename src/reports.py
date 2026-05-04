@@ -158,9 +158,12 @@ def generate_client_report(analysis, suggestions_client, output_dir=None, brandi
     paid_summary = rounded_analysis.get("paid_summary", {})
     kpi_status = rounded_analysis.get("kpi_status", {})
     roas_data = rounded_analysis.get("roas", {})
+    crm_revenue = rounded_analysis.get("crm_revenue", {})
 
     # --- Leads: use paid_summary to avoid double-counting GA4 conversions ---
     paid_leads = paid_summary.get("total_paid_leads", 0)
+    crm_leads = paid_summary.get("crm_leads", 0)
+    total_leads = paid_summary.get("total_leads", 0)
     ga_conversions = ga.get("metrics", {}).get("conversions", 0) if ga else 0
 
     # If paid_summary is empty, fall back to summing channel results
@@ -169,6 +172,18 @@ def generate_client_report(analysis, suggestions_client, output_dir=None, brandi
             paid_leads += meta.get("metrics", {}).get("results", 0)
         if google_ads:
             paid_leads += google_ads.get("metrics", {}).get("results", 0)
+    if not crm_leads:
+        crm_totals = (crm_revenue or {}).get("totals") or {}
+        crm_leads = max(
+            crm_totals.get("leads") or 0,
+            crm_totals.get("lead_count") or 0,
+            crm_totals.get("new_leads") or 0,
+            crm_totals.get("requests") or 0,
+            crm_totals.get("new_clients") or 0,
+            crm_totals.get("closed_deals") or 0,
+        )
+    if not total_leads:
+        total_leads = max(paid_leads or 0, crm_leads or 0)
 
     total_spend = paid_summary.get("total_paid_spend", 0)
     if not total_spend:
@@ -177,7 +192,7 @@ def generate_client_report(analysis, suggestions_client, output_dir=None, brandi
         if google_ads:
             total_spend += google_ads.get("metrics", {}).get("spend", 0)
 
-    cost_per_lead = round(total_spend / paid_leads, 2) if paid_leads > 0 and total_spend > 0 else None
+    cost_per_lead = round(total_spend / total_leads, 2) if total_leads > 0 and total_spend > 0 else None
 
     # MoM for paid leads - weighted average across channels
     leads_change = None
@@ -314,8 +329,9 @@ def generate_client_report(analysis, suggestions_client, output_dir=None, brandi
         "overall_grade": rounded_analysis.get("overall_grade", "N/A"),
         # Scorecard: split into paid leads, website conversions, total
         "paid_leads": paid_leads if paid_leads > 0 else None,
+        "crm_leads": crm_leads if crm_leads > 0 else None,
         "ga_conversions": ga_conversions if ga_conversions > 0 else None,
-        "total_leads": (paid_leads + ga_conversions) if (paid_leads + ga_conversions) > 0 else None,
+        "total_leads": total_leads if total_leads > 0 else ((paid_leads + ga_conversions) if (paid_leads + ga_conversions) > 0 else None),
         "total_spend": total_spend if total_spend > 0 else None,
         "cost_per_lead": cost_per_lead,
         "leads_change": leads_change,
