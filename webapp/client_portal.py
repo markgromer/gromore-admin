@@ -12818,6 +12818,7 @@ def client_reviews():
     from webapp.review_collector import (
         automation_settings,
         available_review_groups,
+        build_review_autopilot_dashboard,
         get_templates,
         preview_review_audience,
         review_setup_status,
@@ -12829,6 +12830,7 @@ def client_reviews():
     preview = preview_review_audience(db, brand, default_keys, default_channels)
     requests = db.get_review_requests(brand_id, limit=75)
     stats = db.get_review_request_stats(brand_id)
+    autopilot = build_review_autopilot_dashboard(db, brand, current_app.config)
 
     return render_template(
         "client_reviews.html",
@@ -12839,6 +12841,7 @@ def client_reviews():
         preview=preview,
         requests=requests,
         stats=stats,
+        autopilot=autopilot,
         setup=review_setup_status(brand),
         automation=automation_settings(brand),
         templates=get_templates(brand),
@@ -12989,6 +12992,30 @@ def client_reviews_run_automation():
     return redirect(url_for("client.client_reviews"))
 
 
+@client_bp.route("/reviews/automation/process-queue", methods=["POST"])
+@client_login_required
+def client_reviews_process_queue():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        abort(404)
+    try:
+        from webapp.warren_crm_events import process_pending_crm_event_actions
+
+        stats = process_pending_crm_event_actions(db, current_app.config, brand_id=brand_id, limit=100)
+    except Exception as exc:
+        log.exception("Review CRM queue processing failed for brand %s", brand_id)
+        flash(f"Review queue processing failed: {exc}", "error")
+        return redirect(url_for("client.client_reviews"))
+    sent = stats.get("sent", 0)
+    resolved = stats.get("resolved", 0)
+    failed = stats.get("failed", 0)
+    skipped = stats.get("skipped", 0)
+    flash(f"Processed due review queue: {sent} sent, {resolved} resolved/skipped, {failed} failed, {skipped} waiting.", "success")
+    return redirect(url_for("client.client_reviews"))
+
+
 @client_bp.route("/reviews/request/<int:request_id>/reviewed", methods=["POST"])
 @client_login_required
 def client_reviews_mark_reviewed(request_id):
@@ -13020,6 +13047,12 @@ def client_review_request(token):
         feedback = (request.form.get("feedback_text") or "").strip()
         db.submit_review_feedback(review_request["id"], rating=rating, feedback_text=feedback)
         review_request = db.get_review_request_by_token(token) or review_request
+        try:
+            from webapp.review_collector import maybe_create_review_recovery_task
+
+            maybe_create_review_recovery_task(db, brand, review_request)
+        except Exception:
+            log.exception("Review recovery task creation failed for request %s", review_request.get("id"))
         flash("Thanks. Your feedback was received.", "success")
 
     return render_template(

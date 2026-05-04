@@ -25,6 +25,31 @@
     .review-metric { border: 1px solid #e2e8f0; border-radius: 10px; padding: .85rem; background: #f8fafc; }
     .review-metric .value { font-size: 1.45rem; font-weight: 900; color: #0f172a; line-height: 1; }
     .review-metric .label { color: #64748b; font-size: .74rem; font-weight: 750; margin-top: .28rem; }
+    .autopilot-card { border: 1px solid #dbeafe; border-radius: 12px; background: #f8fbff; padding: 1rem; }
+    .autopilot-card.blocked { border-color: #fecaca; background: #fff7f7; }
+    .autopilot-card.attention { border-color: #fed7aa; background: #fffaf0; }
+    .autopilot-card.healthy { border-color: #bbf7d0; background: #f4fff8; }
+    .health-pill { display: inline-flex; align-items: center; gap: .35rem; border-radius: 999px; padding: .35rem .6rem; font-size: .72rem; font-weight: 900; text-transform: uppercase; background: #e0f2fe; color: #075985; }
+    .health-pill.blocked { background: #fee2e2; color: #991b1b; }
+    .health-pill.attention { background: #ffedd5; color: #9a3412; }
+    .health-pill.healthy { background: #dcfce7; color: #166534; }
+    .autopilot-metrics { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: .55rem; margin-top: .85rem; }
+    .autopilot-metric { border: 1px solid rgba(148,163,184,.35); border-radius: 9px; background: rgba(255,255,255,.78); padding: .65rem; }
+    .autopilot-metric strong { display: block; font-size: 1.1rem; font-weight: 900; color: #0f172a; line-height: 1; }
+    .autopilot-metric span { display: block; color: #64748b; font-size: .68rem; font-weight: 800; margin-top: .25rem; }
+    .blocker-list, .queue-list, .recovery-list { display: grid; gap: .6rem; }
+    .blocker-item { border-left: 4px solid #f59e0b; background: #fff7ed; padding: .7rem .8rem; border-radius: 8px; }
+    .blocker-item.danger { border-left-color: #ef4444; background: #fff1f2; }
+    .blocker-item.warning { border-left-color: #f59e0b; background: #fffbeb; }
+    .blocker-title { font-size: .82rem; font-weight: 900; color: #0f172a; }
+    .blocker-detail, .blocker-fix { font-size: .74rem; color: #475569; line-height: 1.35; margin-top: .18rem; }
+    .blocker-fix { color: #0f766e; font-weight: 750; }
+    .queue-item, .recovery-item { border: 1px solid #e2e8f0; border-radius: 10px; background: #fff; padding: .7rem .8rem; }
+    .queue-item.due { border-color: #bfdbfe; background: #eff6ff; }
+    .queue-top { display: flex; justify-content: space-between; align-items: flex-start; gap: .75rem; }
+    .queue-name { font-size: .84rem; font-weight: 900; color: #0f172a; }
+    .queue-meta { color: #64748b; font-size: .72rem; line-height: 1.35; margin-top: .15rem; word-break: break-word; }
+    .mini-pill { display: inline-flex; align-items: center; border-radius: 999px; background: #eef2ff; color: #3730a3; padding: .24rem .5rem; font-size: .66rem; font-weight: 900; white-space: nowrap; }
     .group-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: .65rem; }
     .group-option, .channel-option { border: 1px solid #e2e8f0; border-radius: 10px; padding: .72rem; display: flex; gap: .6rem; align-items: flex-start; min-height: 76px; }
     .group-option:hover, .channel-option:hover { border-color: #94a3b8; }
@@ -51,10 +76,12 @@
     @media (max-width: 1050px) {
         .reviews-grid { grid-template-columns: 1fr; }
         .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .autopilot-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         .settings-grid { grid-template-columns: 1fr; }
     }
     @media (max-width: 620px) {
         .metric-grid { grid-template-columns: 1fr; }
+        .autopilot-metrics { grid-template-columns: 1fr; }
     }
 </style>
 
@@ -79,27 +106,55 @@
     <div class="review-metric"><div class="value">{{ '%.1f'|format(stats.avg_rating or 0) }}</div><div class="label">Private rating avg</div></div>
 </div>
 
-<div class="review-panel mb-3">
+<div class="autopilot-card {{ autopilot.health }} mb-3">
     <div class="d-flex justify-content-between align-items-center gap-3 flex-wrap">
         <div>
-            <div class="review-panel-title mb-1"><i class="bi bi-robot"></i> Automation Brain</div>
+            <div class="review-panel-title mb-1"><i class="bi bi-robot"></i> Review Autopilot</div>
             <div class="text-muted" style="font-size:.84rem;">
                 {% if automation.enabled %}Enabled{% else %}Paused{% endif %}:
                 waits {{ automation.delay_days }} day(s) after service, suppresses for {{ automation.cooldown_days }} day(s), max {{ automation.max_attempts }} ask(s), and reroutes low private feedback into recovery.
                 CRM job-completion webhooks queue requests automatically, then WARREN re-checks review history and opt-outs before sending.
             </div>
         </div>
+        <span class="health-pill {{ autopilot.health }}">
+            {% if autopilot.health == 'healthy' %}<i class="bi bi-check-circle"></i>
+            {% elif autopilot.health == 'blocked' %}<i class="bi bi-exclamation-octagon"></i>
+            {% else %}<i class="bi bi-exclamation-triangle"></i>{% endif %}
+            {{ autopilot.health_label }}
+        </span>
         <form method="post" action="{{ url_for('client.client_reviews_run_automation') }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <button class="btn btn-outline-success btn-sm fw-bold" type="submit" {% if not automation.enabled or not setup.ready %}disabled{% endif %}>
-                <i class="bi bi-play-circle me-1"></i> Run eligible requests now
+                <i class="bi bi-play-circle me-1"></i> Run audience sweep now
             </button>
         </form>
+    </div>
+    <div class="autopilot-metrics">
+        <div class="autopilot-metric"><strong>{{ autopilot.metrics.crm_queued }}</strong><span>Queued from CRM</span></div>
+        <div class="autopilot-metric"><strong>{{ autopilot.metrics.crm_due }}</strong><span>Due now</span></div>
+        <div class="autopilot-metric"><strong>{{ autopilot.metrics.crm_sent }}</strong><span>CRM-triggered sent</span></div>
+        <div class="autopilot-metric"><strong>{{ autopilot.metrics.suppressed }}</strong><span>Suppressed safely</span></div>
+        <div class="autopilot-metric"><strong>{{ autopilot.metrics.recovery }}</strong><span>Recovery issues</span></div>
     </div>
 </div>
 
 <div class="reviews-grid">
     <div>
+        {% if autopilot.blockers %}
+        <div class="review-panel mb-3">
+            <div class="review-panel-title"><i class="bi bi-tools"></i> What Needs Work</div>
+            <div class="blocker-list">
+                {% for blocker in autopilot.blockers %}
+                <div class="blocker-item {{ blocker.level }}">
+                    <div class="blocker-title">{{ blocker.title }}</div>
+                    <div class="blocker-detail">{{ blocker.detail }}</div>
+                    <div class="blocker-fix">{{ blocker.fix }}</div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
         <form method="post" action="{{ url_for('client.client_reviews_send') }}" id="reviewSendForm">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <div class="review-panel mb-3">
@@ -200,6 +255,81 @@
     </div>
 
     <aside>
+        <div class="review-panel mb-3">
+            <div class="d-flex justify-content-between align-items-center gap-2 mb-2">
+                <div class="review-panel-title mb-0"><i class="bi bi-list-check"></i> Next CRM-Triggered Requests</div>
+                <form method="post" action="{{ url_for('client.client_reviews_process_queue') }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button class="btn btn-outline-primary btn-sm fw-bold" type="submit" {% if not autopilot.metrics.crm_due %}disabled{% endif %}>
+                        Process due
+                    </button>
+                </form>
+            </div>
+            {% if autopilot.queue %}
+            <div class="queue-list">
+                {% for item in autopilot.queue %}
+                <div class="queue-item {% if item.due %}due{% endif %}">
+                    <div class="queue-top">
+                        <div>
+                            <div class="queue-name">{{ item.customer }}</div>
+                            <div class="queue-meta">{{ item.recipient or 'No recipient shown' }}</div>
+                            <div class="queue-meta">{{ item.source_event_type or item.source }}{% if item.service_date %} | Service: {{ item.service_date }}{% endif %}</div>
+                        </div>
+                        <span class="mini-pill">{% if item.due %}Due now{% else %}{{ item.scheduled_label or 'Scheduled' }}{% endif %}</span>
+                    </div>
+                    {% if item.detail %}<div class="queue-meta mt-1">{{ item.detail }}</div>{% endif %}
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="text-muted" style="font-size:.82rem;">No queued CRM-triggered review requests yet.</div>
+            {% endif %}
+            <div class="border-top mt-3 pt-3">
+                <div class="review-panel-title mb-2"><i class="bi bi-diagram-3"></i> Autopilot Sequence</div>
+                <ol class="ps-3 mb-0" style="font-size:.78rem; color:#475569; line-height:1.55;">
+                    {% for step in autopilot.playbook %}
+                    <li>{{ step }}</li>
+                    {% endfor %}
+                </ol>
+            </div>
+        </div>
+
+        {% if autopilot.recovery_items %}
+        <div class="review-panel mb-3">
+            <div class="review-panel-title"><i class="bi bi-heart-pulse"></i> Service Recovery</div>
+            <div class="recovery-list">
+                {% for item in autopilot.recovery_items %}
+                <div class="recovery-item">
+                    <div class="queue-top">
+                        <div>
+                            <div class="queue-name">{{ item.customer }}</div>
+                            <div class="queue-meta">{{ item.rating }}/5 private feedback</div>
+                        </div>
+                        <span class="mini-pill">Handle first</span>
+                    </div>
+                    {% if item.feedback %}<div class="queue-meta mt-1">{{ item.feedback }}</div>{% endif %}
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        {% if autopilot.suppressed_counts %}
+        <div class="review-panel mb-3">
+            <div class="review-panel-title"><i class="bi bi-shield-slash"></i> Why WARREN Suppressed Asks</div>
+            <div class="queue-list">
+                {% for status, count in autopilot.suppressed_counts.items() %}
+                <div class="queue-item">
+                    <div class="queue-top">
+                        <div class="queue-name">{{ status|replace('_', ' ')|title }}</div>
+                        <span class="mini-pill">{{ count }}</span>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
         <div class="review-panel mb-3">
             <div class="review-panel-title"><i class="bi bi-clipboard-data"></i> Live Preview</div>
             <div class="review-metric">

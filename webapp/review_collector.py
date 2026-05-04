@@ -4,6 +4,7 @@ Review Collector: compliant review requests, private feedback, and tracking.
 from __future__ import annotations
 
 import html
+import json
 import re
 import secrets
 from datetime import UTC, datetime, timedelta
@@ -341,6 +342,178 @@ def build_review_intelligence(db, brand, recipients):
     }
 
 
+def _parse_action_payload(action):
+    try:
+        payload = json.loads((action or {}).get("message_text") or "{}")
+    except Exception:
+        payload = {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _action_recipient(action):
+    payload = _parse_action_payload(action)
+    recipient = payload.get("recipient") if isinstance(payload.get("recipient"), dict) else {}
+    summary = payload.get("summary") if isinstance(payload.get("summary"), dict) else {}
+    if not recipient:
+        recipient = _summary_recipient(summary, event_id=(action or {}).get("source_event_id"), event_type=(action or {}).get("source_event_type"))
+    return recipient or {}
+
+
+def _count_by(items, key):
+    counts = {}
+    for item in items or []:
+        value = _clean(item.get(key)) or "unknown"
+        counts[value] = counts.get(value, 0) + 1
+    return counts
+
+
+def build_review_autopilot_dashboard(db, brand, app_config=None):
+    settings = automation_settings(brand)
+    setup = review_setup_status(brand)
+    app_config = app_config or {}
+    smtp_ready = bool(app_config.get("SMTP_USER") and app_config.get("SMTP_PASSWORD"))
+    sms_ready = setup["sms_ready"]
+    now = datetime.utcnow()
+
+    actions = db.get_crm_event_actions(brand["id"], limit=300, action_kind="review_request")
+    requests = db.get_review_requests(brand["id"], limit=300)
+    queued_actions = [a for a in actions if _clean(a.get("status")) == "queued"]
+    sent_actions = [a for a in actions if _clean(a.get("status")) == "sent"]
+    resolved_actions = [a for a in actions if _clean(a.get("status")) == "resolved"]
+    failed_actions = [a for a in actions if _clean(a.get("status")) == "failed"]
+    due_actions = [
+        a for a in queued_actions
+        if (_parse_dt(a.get("scheduled_for")) or now) <= now
+    ]
+
+    queue = []
+    for action in sorted(queued_actions, key=lambda a: a.get("scheduled_for") or "")[:12]:
+        recipient = _action_recipient(action)
+        scheduled_dt = _parse_dt(action.get("scheduled_for"))
+        queue.append({
+            "id": action.get("id"),
+            "customer": _clean(recipient.get("name")) or "Customer",
+            "recipient": _clean(recipient.get("phone")) or _clean(recipient.get("email")) or _clean(action.get("recipient")),
+            "source": _clean(recipient.get("source")) or "crm_event",
+            "source_event_type": _clean(action.get("source_event_type")),
+            "service_date": _clean(recipient.get("last_service_date")),
+            "scheduled_for": action.get("scheduled_for") or "",
+            "scheduled_label": _format_date(scheduled_dt) if scheduled_dt else "",
+            "due": scheduled_dt <= now if scheduled_dt else True,
+            "detail": _clean(action.get("detail")),
+        })
+
+    suppressed = [r for r in requests if _clean(r.get("eligibility_status")) not in ("", "eligible")]
+    suppressed_counts = _count_by(suppressed, "eligibility_status")
+    recovery_items = []
+    min_rating = settings["min_private_rating"]
+    for request in requests:
+        try:
+            rating = int(request.get("rating") or 0)
+        except (TypeError, ValueError):
+            rating = 0
+        if rating and rating < min_rating:
+            recovery_items.append({
+                "id": request.get("id"),
+                "customer": request.get("customer_name") or "Customer",
+                "rating": rating,
+                "feedback": request.get("feedback_text") or "",
+                "submitted_at": request.get("feedback_submitted_at") or request.get("updated_at") or "",
+                "status": request.get("status") or "",
+            })
+    recovery_items = recovery_items[:8]
+
+    blockers = []
+    if not settings["enabled"]:
+        blockers.append({
+            "level": "warning",
+            "title": "Review Autopilot is paused",
+            "detail": "WARREN can still send manual requests, but CRM job completions will not trigger automatic asks.",
+            "fix": "Turn on automatic review requests after the destination and channels are ready.",
+        })
+    if not setup["ready"]:
+        blockers.append({
+            "level": "danger",
+            "title": "No public review destination",
+            "detail": "WARREN needs a Google Place ID or review URL before it can send a compliant request.",
+            "fix": "Add the Google Place ID or paste the direct review link in Request Setup.",
+        })
+    if "sms" in settings["channels"] and not sms_ready:
+        blockers.append({
+            "level": "danger",
+            "title": "SMS channel is selected but not connected",
+            "detail": "Review requests will fail over SMS until this brand has a sending number and API key.",
+            "fix": "Connect OpenPhone/Quo or remove SMS from automation channels.",
+        })
+    if "email" in settings["channels"] and not smtp_ready:
+        blockers.append({
+            "level": "danger",
+            "title": "Email channel is selected but SMTP is not ready",
+            "detail": "Email review requests cannot send without server SMTP credentials.",
+            "fix": "Configure SMTP or leave email off for this brand.",
+        })
+    if settings["enabled"] and not queued_actions and not sent_actions and not resolved_actions:
+        blockers.append({
+            "level": "warning",
+            "title": "No CRM completion events have queued review asks yet",
+            "detail": "WARREN is waiting for completed-job webhooks with customer contact details.",
+            "fix": "Verify Jobber/SNG completion webhooks are enabled and sending customer name plus phone or email.",
+        })
+    if suppressed_counts.get("needs_service_date"):
+        blockers.append({
+            "level": "warning",
+            "title": "Some customers are missing service dates",
+            "detail": f"{suppressed_counts['needs_service_date']} recipient(s) could not be timed against the post-service window.",
+            "fix": "Use CRM completion events or map the CRM field that carries completed/service date.",
+        })
+    if recovery_items:
+        blockers.append({
+            "level": "danger",
+            "title": "Service recovery is needed before more asks",
+            "detail": f"{len(recovery_items)} customer(s) gave low private feedback.",
+            "fix": "Handle recovery, then mark the task done or mark the customer reviewed/suppressed.",
+        })
+
+    if blockers and any(b["level"] == "danger" for b in blockers):
+        health = "blocked"
+        health_label = "Blocked"
+    elif blockers:
+        health = "attention"
+        health_label = "Needs attention"
+    elif settings["enabled"]:
+        health = "healthy"
+        health_label = "Autopilot ready"
+    else:
+        health = "paused"
+        health_label = "Paused"
+
+    return {
+        "health": health,
+        "health_label": health_label,
+        "blockers": blockers,
+        "queue": queue,
+        "recovery_items": recovery_items,
+        "suppressed_counts": suppressed_counts,
+        "source_counts": _count_by(actions, "source_event_type"),
+        "action_status_counts": _count_by(actions, "status"),
+        "metrics": {
+            "crm_queued": len(queued_actions),
+            "crm_due": len(due_actions),
+            "crm_sent": len(sent_actions),
+            "crm_resolved": len(resolved_actions),
+            "crm_failed": len(failed_actions),
+            "suppressed": len(suppressed),
+            "recovery": len(recovery_items),
+        },
+        "playbook": [
+            "Completed job or visit arrives from CRM.",
+            f"WARREN waits {settings['delay_days']} day(s), then checks review history, opt-outs, service age, and feedback.",
+            "Eligible customers get the same public review destination by selected channel.",
+            "Low private feedback creates a service-recovery task instead of another public ask.",
+        ],
+    }
+
+
 def render_template_text(template, *, brand, recipient, review_link):
     brand_name = _clean((brand or {}).get("display_name")) or "our team"
     name = _clean((recipient or {}).get("name")) or "Customer"
@@ -599,8 +772,6 @@ def queue_review_request_from_crm_event(db, brand, event_id, event_type, summary
     if scheduled_for < now_naive:
         scheduled_for = now_naive
 
-    import json
-
     action_id = db.queue_crm_event_action(
         brand["id"],
         source_event_id=event_id,
@@ -621,12 +792,7 @@ def queue_review_request_from_crm_event(db, brand, event_id, event_type, summary
 
 
 def process_review_request_action(db, app_config, brand, action):
-    import json
-
-    try:
-        payload = json.loads(action.get("message_text") or "{}")
-    except Exception:
-        payload = {}
+    payload = _parse_action_payload(action)
     recipient = payload.get("recipient") if isinstance(payload.get("recipient"), dict) else {}
     summary = payload.get("summary") if isinstance(payload.get("summary"), dict) else {}
     if not recipient:
@@ -640,6 +806,45 @@ def process_review_request_action(db, app_config, brand, action):
         created_by=f"crm_event:{action.get('source_event_type') or ''}",
     )
     return result
+
+
+def maybe_create_review_recovery_task(db, brand, review_request):
+    try:
+        rating = int((review_request or {}).get("rating") or 0)
+    except (TypeError, ValueError):
+        rating = 0
+    settings = automation_settings(brand)
+    if not rating or rating >= settings["min_private_rating"]:
+        return 0
+
+    request_id = (review_request or {}).get("id")
+    source_ref = f"review_request:{request_id}"
+    existing = db.get_brand_task_by_source(brand["id"], "review_recovery", source_ref)
+    if existing and (existing.get("status") or "open") != "done":
+        return existing.get("id") or 0
+
+    customer = _clean((review_request or {}).get("customer_name")) or "Customer"
+    feedback = _clean((review_request or {}).get("feedback_text")) or "No written feedback was provided."
+    steps = [
+        {"label": "Review the private feedback and customer history.", "done": False},
+        {"label": "Contact the customer personally before asking for any public review.", "done": False},
+        {"label": "Record the recovery outcome in WARREN.", "done": False},
+    ]
+    description = (
+        f"{customer} left {rating}/5 private feedback from a review request.\n\n"
+        f"Feedback: {feedback}\n\n"
+        "Do not send another public review ask until this is handled."
+    )
+    return db.create_brand_task(
+        brand["id"],
+        f"Service recovery: {customer}",
+        description=description,
+        steps_json=json.dumps(steps),
+        priority="high",
+        source="review_recovery",
+        source_ref=source_ref,
+        created_by=None,
+    )
 
 
 def process_review_automation(db, app_config, brand, *, created_by="automation"):

@@ -4534,16 +4534,25 @@ class WebDB:
         conn.close()
         return action_id
 
-    def get_crm_event_actions(self, brand_id, limit=50):
+    def get_crm_event_actions(self, brand_id, limit=50, action_kind=None, status=None):
         conn = self._conn()
+        clauses = ["brand_id = ?"]
+        params = [brand_id]
+        if action_kind:
+            clauses.append("action_kind = ?")
+            params.append(str(action_kind or "")[:50])
+        if status:
+            clauses.append("status = ?")
+            params.append(str(status or "")[:50])
+        params.append(int(limit or 50))
         rows = conn.execute(
-            """
+            f"""
             SELECT * FROM crm_event_actions
-            WHERE brand_id = ?
+            WHERE {' AND '.join(clauses)}
             ORDER BY created_at DESC, id DESC
             LIMIT ?
             """,
-            (brand_id, int(limit or 50)),
+            params,
         ).fetchall()
         conn.close()
         return [dict(r) for r in rows]
@@ -8249,6 +8258,22 @@ class WebDB:
         row = conn.execute(
             "SELECT t.*, u.display_name AS assignee_name FROM brand_tasks t LEFT JOIN client_users u ON t.assigned_to = u.id WHERE t.id = ? AND t.brand_id = ?",
             (task_id, brand_id),
+        ).fetchone()
+        conn.close()
+        return dict(row) if row else None
+
+    def get_brand_task_by_source(self, brand_id, source, source_ref):
+        conn = self._conn()
+        row = conn.execute(
+            """
+            SELECT t.*, u.display_name AS assignee_name
+            FROM brand_tasks t
+            LEFT JOIN client_users u ON t.assigned_to = u.id
+            WHERE t.brand_id = ? AND t.source = ? AND t.source_ref = ?
+            ORDER BY t.created_at DESC, t.id DESC
+            LIMIT 1
+            """,
+            (brand_id, source or "", source_ref or ""),
         ).fetchone()
         conn.close()
         return dict(row) if row else None
