@@ -67,6 +67,8 @@ def generate_suggestions(analysis):
     if google_ads:
         suggestions.extend(_google_ads_suggestions(google_ads, industry, goals))
 
+    suggestions.extend(_ad_intelligence_suggestions(analysis, client_config))
+
     # ── Facebook Organic suggestions ──
     fb_organic = analysis.get("facebook_organic")
     if fb_organic:
@@ -89,6 +91,56 @@ def generate_suggestions(analysis):
     # Sort by priority
     priority_order = {PRIORITY_HIGH: 0, PRIORITY_MEDIUM: 1, PRIORITY_LOW: 2}
     suggestions.sort(key=lambda s: priority_order.get(s["priority"], 99))
+
+    return suggestions
+
+
+def _ad_intelligence_suggestions(analysis, client_config=None):
+    client_config = client_config or {}
+    try:
+        from .ad_intelligence import build_ad_intelligence
+        intelligence = analysis.get("ad_intelligence") or build_ad_intelligence(analysis, client_config)
+    except Exception:
+        intelligence = analysis.get("ad_intelligence") or {}
+
+    suggestions = []
+    seen = set()
+    priority_map = {
+        "critical": PRIORITY_HIGH,
+        "high": PRIORITY_HIGH,
+        "medium": PRIORITY_MEDIUM,
+        "low": PRIORITY_LOW,
+    }
+    category_map = {
+        "cut_waste": CATEGORY_PAID,
+        "rebalance_budget": CATEGORY_BUDGET,
+        "scale_winner": CATEGORY_BUDGET,
+        "creative_refresh": CATEGORY_CREATIVE,
+        "creative_test": CATEGORY_CREATIVE,
+    }
+
+    for finding in (intelligence.get("next_best_actions") or [])[:4]:
+        key = finding.get("key") or finding.get("title")
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        entity = finding.get("entity") or {}
+        data_point = None
+        if entity.get("wasted_spend"):
+            data_point = f"${_safe_num(entity.get('wasted_spend')):.0f} at risk"
+        elif entity.get("target_cpa"):
+            data_point = f"Target CPA: ${_safe_num(entity.get('target_cpa')):.0f}"
+
+        suggestions.append(make_suggestion(
+            finding.get("title") or "Fix paid media waste",
+            f"{finding.get('detail', '')} {finding.get('recommended_action', '')}".strip(),
+            priority_map.get(str(finding.get("severity") or "").lower(), PRIORITY_MEDIUM),
+            category_map.get(finding.get("action_type"), CATEGORY_PAID),
+            "paid_media",
+            data_point=data_point,
+            confidence=finding.get("confidence") or "medium",
+            evidence=finding.get("evidence") or [],
+        ))
 
     return suggestions
 

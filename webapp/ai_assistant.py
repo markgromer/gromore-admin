@@ -1008,6 +1008,7 @@ def _summarize_analysis_for_ai(analysis: Dict[str, Any]) -> Dict[str, Any]:
             "overall_score": analysis.get("overall_score"),
         },
         "paid_summary": analysis.get("paid_summary") or {},
+        "ad_intelligence": analysis.get("ad_intelligence") or {},
         "kpi_status": analysis.get("kpi_status") or {},
         "highlights": analysis.get("highlights") or [],
         "concerns": analysis.get("concerns") or [],

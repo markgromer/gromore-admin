@@ -1030,7 +1030,7 @@ def build_full_analysis(client_id, month, current_data, client_config):
         metrics["period"] = facebook_period
         facebook_organic["metrics"] = metrics
 
-    return {
+    analysis_payload = {
         "client_id": client_id,
         "month": month,
         "client_config": client_config,
@@ -1051,3 +1051,11 @@ def build_full_analysis(client_id, month, current_data, client_config):
         "period": _month_progress(month),
         "has_previous_month": bool(prev_data),
     }
+
+    try:
+        from .ad_intelligence import build_ad_intelligence
+        analysis_payload["ad_intelligence"] = build_ad_intelligence(analysis_payload, client_config)
+    except Exception:
+        analysis_payload["ad_intelligence"] = {}
+
+    return analysis_payload

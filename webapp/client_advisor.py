@@ -222,6 +222,7 @@ def _build_action_items(suggestions, analysis_summary):
     website_detail = analysis_summary.get("website_detail", {})
     fb_organic_detail = analysis_summary.get("facebook_organic_detail", {})
     kpis = analysis_summary.get("kpis", {})
+    ad_intelligence = analysis_summary.get("ad_intelligence") or {}
 
     action_items = []
     for suggestion in suggestions:
@@ -262,6 +263,11 @@ def _build_action_items(suggestions, analysis_summary):
             item["relevant_data"]["meta_campaigns"] = (meta_detail.get("campaigns") or [])[:10]
             item["relevant_data"]["meta_top_ads"] = (meta_detail.get("top_ads") or [])[:10]
             item["relevant_data"]["meta_kpis"] = kpis.get("meta", {})
+
+        if paid_context and ad_intelligence:
+            item["relevant_data"]["ad_intelligence_findings"] = (ad_intelligence.get("findings") or [])[:8]
+            item["relevant_data"]["ad_intelligence_next_actions"] = (ad_intelligence.get("next_best_actions") or [])[:5]
+            item["relevant_data"]["ad_intelligence_summary"] = ad_intelligence.get("summary") or {}
 
         if category in seo_categories or "seo" in category or "keyword" in title_lower:
             item["relevant_data"]["seo_top_queries"] = (seo_detail.get("top_queries") or [])[:15]
@@ -494,6 +500,12 @@ def _build_mission_intelligence(suggestion, action_item, analysis, brand=None):
             evidence.append(f"Top post {message}: {int(likes + comments + shares)} visible engagements.")
 
     if category in {"paid_advertising", "budget", "creative", "strategy"}:
+        for finding in (relevant_data.get("ad_intelligence_findings") or [])[:2]:
+            title = _trim_copy(finding.get("title") or finding.get("key") or "Paid media finding", 90)
+            detail = _trim_copy(finding.get("detail") or "", 140)
+            if title:
+                evidence.append(f"Ad intelligence: {title}{f' - {detail}' if detail else ''}.")
+
         for campaign in (relevant_data.get("google_ads_campaigns") or relevant_data.get("meta_campaigns") or [])[:2]:
             metrics = campaign.get("metrics") or campaign
             name = campaign.get("name") or campaign.get("campaign_name")
@@ -886,7 +898,12 @@ def build_client_dashboard(analysis, suggestions, brand, ai_model=None, include_
         - actions: prioritized action cards with step-by-step instructions
         - kpi_status: target vs actual KPIs
     """
+    from src.ad_intelligence import build_ad_intelligence
     from webapp.vertical_intelligence import build_vertical_profile
+
+    if not (analysis.get("ad_intelligence") or {}).get("summary"):
+        analysis = dict(analysis)
+        analysis["ad_intelligence"] = build_ad_intelligence(analysis, brand)
 
     channels = {}
 
@@ -928,6 +945,7 @@ def build_client_dashboard(analysis, suggestions, brand, ai_model=None, include_
         "channels": channels,
         "actions": actions,
         "kpi_status": kpi_status,
+        "ad_intelligence": analysis.get("ad_intelligence") or {},
         "vertical_profile": build_vertical_profile(brand),
         "highlights": analysis.get("highlights", []),
         "concerns": analysis.get("concerns", []),
@@ -1893,8 +1911,12 @@ def _generate_ai_actions(suggestions, analysis, brand, ai_model=None, mission_pr
         or "gpt-4o"
     )
 
+    from src.ad_intelligence import build_ad_intelligence
     from webapp.ai_assistant import _summarize_analysis_for_ai
     from webapp.vertical_intelligence import build_vertical_profile
+    if not (analysis.get("ad_intelligence") or {}).get("summary"):
+        analysis = dict(analysis)
+        analysis["ad_intelligence"] = build_ad_intelligence(analysis, brand)
     analysis_summary = _summarize_analysis_for_ai(analysis)
 
     if action_items is None:
@@ -1928,6 +1950,7 @@ def _generate_ai_actions(suggestions, analysis, brand, ai_model=None, mission_pr
         "highlights": analysis_summary.get("highlights", []),
         "concerns": analysis_summary.get("concerns", []),
         "period": analysis_summary.get("period", {}),
+        "ad_intelligence": analysis_summary.get("ad_intelligence") or {},
         "action_items": action_items,
     }
 
@@ -1972,6 +1995,7 @@ def _generate_ai_actions(suggestions, analysis, brand, ai_model=None, mission_pr
         "- If category is organic_social, keep the mission about organic Page posting, engagement, reach, and top posts. Do not use paid campaign spend or lead results as evidence for that mission.\n"
         "- If the SEO data already points to existing pages and the search volume is light, do NOT recommend new city or local pages. Rewrite the current page instead.\n"
         "- If period says early_month is true, do NOT create missions from low current-month volume alone. Use rate, spend, page, query, or campaign evidence, and call out lower confidence when sample size is thin.\n"
+        "- Use ad_intelligence as the primary paid-media diagnosis when it is present. Its findings already normalize Google Ads and Meta evidence into waste, scale, creative, and data-gap signals.\n"
         "- Use vertical_profile to adapt chatbot, ads, commercial, and content guidance to the actual service vertical. Do not assume one niche.\n"
         "- If vertical_profile shows commercial targets, distinguish commercial account missions from residential lead missions.\n"
         "- Every mission must include a diagnosis first: what signal triggered it, what exact evidence supports it, what might be a false positive, and then the fix.\n"

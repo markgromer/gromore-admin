@@ -24,6 +24,7 @@ def _data_availability(context):
     seo = (context or {}).get("seo") or {}
     google_ads = (context or {}).get("google_ads") or {}
     meta_ads = (context or {}).get("meta_ads") or {}
+    ad_intelligence = (context or {}).get("ad_intelligence") or {}
     competitor = (context or {}).get("competitor_watch") or {}
     performance = (context or {}).get("performance") or {}
 
@@ -43,6 +44,8 @@ def _data_availability(context):
         "has_google_ads_search_terms": bool((google_ads.get("search_terms") or [])[:1]),
         "has_meta_campaigns": bool((meta_ads.get("campaigns") or [])[:1]),
         "has_meta_top_ads": bool((meta_ads.get("top_ads") or [])[:1]),
+        "has_ad_intelligence_findings": bool((ad_intelligence.get("findings") or [])[:1]),
+        "has_ad_intelligence_actions": bool((ad_intelligence.get("next_best_actions") or [])[:1]),
         "has_competitor_watch": bool(competitor),
         "has_kpis": bool((performance.get("kpis") or {}) if isinstance(performance, dict) else performance),
     }
@@ -103,8 +106,9 @@ def _evidence_rules(prefix=""):
     return (
         f"{p}Evidence rules:\n"
         f"{p}- You MUST include a 'data_used' array listing which context fields you used, chosen ONLY from this allowed set:\n"
-        f"{p}  ['seo.top_queries','seo.keyword_opportunities','seo.top_pages','google_ads.campaigns','google_ads.search_terms','meta_ads.campaigns','meta_ads.top_ads','competitor_watch','performance.kpis']\n"
+        f"{p}  ['seo.top_queries','seo.keyword_opportunities','seo.top_pages','google_ads.campaigns','google_ads.search_terms','meta_ads.campaigns','meta_ads.top_ads','ad_intelligence.findings','ad_intelligence.next_best_actions','competitor_watch','performance.kpis']\n"
         f"{p}- If a field is not present or is empty in the context, you MUST NOT include it in data_used.\n"
+        f"{p}- When ad_intelligence.findings exists, use it first for paid-media diagnosis before writing platform recommendations.\n"
         f"{p}- Do not invent competitor names, metrics, or claims. If unknown, keep copy generic but still specific to services + service area.\n"
     )
 
@@ -332,7 +336,11 @@ def _get_api_key(brand=None):
 
 def _build_ad_context(analysis, brand):
     """Build the context payload for ad generation."""
+    from src.ad_intelligence import build_ad_intelligence
     from webapp.ai_assistant import _summarize_analysis_for_ai
+    if not (analysis.get("ad_intelligence") or {}).get("summary"):
+        analysis = dict(analysis)
+        analysis["ad_intelligence"] = build_ad_intelligence(analysis, brand)
     summary = _summarize_analysis_for_ai(analysis)
 
     client = summary.get("client", {})
@@ -351,7 +359,7 @@ def _build_ad_context(analysis, brand):
             parts.append(f"notes: {cp['notes']}")
         competitor_info.append(" | ".join(parts))
 
-    return {
+    context = {
         "business": {
             "name": brand.get("display_name") or client.get("name"),
             "industry": client.get("industry"),
@@ -370,9 +378,12 @@ def _build_ad_context(analysis, brand):
         },
         "google_ads": summary.get("google_ads_detail", {}),
         "meta_ads": summary.get("meta_detail", {}),
+        "ad_intelligence": summary.get("ad_intelligence") or {},
         "seo": summary.get("seo_detail", {}),
         "competitor_watch": summary.get("competitor_watch", {}),
     }
+    context["data_available"] = _data_availability(context)
+    return context
 
 
 def _call_ai(api_key, system, context, label, model, knowledge=""):
