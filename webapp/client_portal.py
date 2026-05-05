@@ -14051,6 +14051,27 @@ def client_heatmap_test_api():
     except Exception as exc:
         checks["places_legacy"] = {"ok": False, "detail": str(exc)}
 
+    # Test 4: Server browser runtime used by the actual heatmap scanner
+    try:
+        import os as _os
+        from playwright.sync_api import sync_playwright as _sync_playwright
+
+        with _sync_playwright() as playwright:
+            browser = playwright.chromium.launch(headless=True)
+            page = browser.new_page()
+            page.goto("data:text/html,<title>heatmap-browser-ok</title>", timeout=10000)
+            title = page.title()
+            browser.close()
+        if title == "heatmap-browser-ok":
+            checks["browser_runtime"] = {
+                "ok": True,
+                "detail": f"Working ({_os.environ.get('PLAYWRIGHT_BROWSERS_PATH') or 'default path'})",
+            }
+        else:
+            checks["browser_runtime"] = {"ok": False, "detail": "Browser launched but page check failed."}
+    except Exception as exc:
+        checks["browser_runtime"] = {"ok": False, "detail": str(exc)[:500]}
+
     all_ok = all(c["ok"] for c in checks.values())
     any_places = checks.get("places_new", {}).get("ok") or checks.get("places_legacy", {}).get("ok")
     return jsonify(ok=True, all_ok=all_ok, any_places=any_places, checks=checks)

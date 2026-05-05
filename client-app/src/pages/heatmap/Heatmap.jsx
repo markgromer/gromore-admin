@@ -131,6 +131,7 @@ function rankColor(rank) {
 function summarizeApiChecks(checks) {
   if (!checks) return null
   return [
+    `Browser scanner: ${checks.browser_runtime?.detail || 'Unknown'}`,
     `Places API (New): ${checks.places_new?.detail || 'Unknown'}`,
     `Places API (Legacy): ${checks.places_legacy?.detail || 'Unknown'}`,
     `Geocoding API: ${checks.geocoding?.detail || 'Unknown'}`,

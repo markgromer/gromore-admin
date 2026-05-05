@@ -1298,7 +1298,7 @@ function setActiveHistoryItem(scanId) {
 }
 
 function buildHistoryItemHtml(scan) {
-    var avgLabel = scan.avg_rank > 0 ? 'Avg local #' + scan.avg_rank : 'Not returned in scan';
+    var avgLabel = scan.status === 'pending' ? 'Scanning...' : (scan.avg_rank > 0 ? 'Avg local #' + scan.avg_rank : 'Not returned in scan');
     var timeLabel = scan.scanned_at || 'Just now';
     return '<div class="scan-history-item mb-2 active" data-scan-id="' + scan.id + '">' +
         '<div class="d-flex justify-content-between align-items-start">' +
@@ -1336,6 +1336,10 @@ function prependHistoryItem(scan) {
 
 function hydrateScan(scan, options) {
     if (!scan) return;
+    if (scan.status === 'pending') {
+        setScanStateNote('<i class="bi bi-hourglass-split me-1"></i>Heatmap scan is still running. Results will load automatically when it finishes.', 'is-dirty');
+        return;
+    }
 
     currentKeyword = scan.keyword || '';
     currentGridSize = parseInt(scan.grid_size || currentGridSize || 5, 10);
@@ -1356,6 +1360,46 @@ function hydrateScan(scan, options) {
     renderCompetitorInsights();
     plotMapMarkers(currentResults, {fitBounds: !options || options.fitBounds !== false});
     markResultsFresh(currentKeyword);
+    if (scan.debug) showDebug(scan.debug);
+}
+
+function waitForScanCompletion(scanId) {
+    var attempts = 0;
+    return new Promise(function(resolve, reject) {
+        function poll() {
+            attempts += 1;
+            fetch('/client/heatmap/scan/' + scanId)
+                .then(function(response) { return response.json(); })
+                .then(function(data) {
+                    if (!data.ok) {
+                        reject(new Error(data.error || 'Failed to load scan.'));
+                        return;
+                    }
+                    var scan = data.scan || {};
+                    if (scan.status === 'complete') {
+                        resolve(scan);
+                        return;
+                    }
+                    if (scan.status === 'failed') {
+                        reject(new Error(scan.error_message || 'Heatmap scan failed.'));
+                        return;
+                    }
+                    if (attempts >= 90) {
+                        reject(new Error('Heatmap scan is still running. Refresh in a moment.'));
+                        return;
+                    }
+                    window.setTimeout(poll, 2000);
+                })
+                .catch(function() {
+                    if (attempts >= 90) {
+                        reject(new Error('Network error while waiting for scan.'));
+                        return;
+                    }
+                    window.setTimeout(poll, 2000);
+                });
+        }
+        poll();
+    });
 }
 
 function loadScan(scanId) {
@@ -1364,6 +1408,13 @@ function loadScan(scanId) {
         .then(function(response) { return response.json(); })
         .then(function(data) {
             if (!data.ok) return;
+            if (data.scan && data.scan.status === 'pending') {
+                setScanStateNote('<i class="bi bi-hourglass-split me-1"></i>Heatmap scan is still running. Waiting for results...', 'is-dirty');
+                waitForScanCompletion(scanId)
+                    .then(function(scan) { hydrateScan(scan, {fitBounds: true, pan: true}); })
+                    .catch(function(error) { alert(error.message || 'Heatmap scan failed.'); });
+                return;
+            }
             hydrateScan(data.scan, {fitBounds: true, pan: true});
         });
 }
@@ -1639,14 +1690,46 @@ document.addEventListener('DOMContentLoaded', function() {
                     return response.json();
                 })
                 .then(function(data) {
-                    scanBtn.disabled = false;
-                    document.getElementById('scanSpinner').classList.remove('active');
-                    document.getElementById('scanIcon').style.display = '';
-
                     if (!data.ok) {
+                        scanBtn.disabled = false;
+                        document.getElementById('scanSpinner').classList.remove('active');
+                        document.getElementById('scanIcon').style.display = '';
                         alert(data.error || 'Scan failed');
                         return;
                     }
+
+                    if (data.pending) {
+                        currentKeyword = keyword;
+                        prependHistoryItem({
+                            id: data.scan_id,
+                            keyword: currentKeyword,
+                            radius_miles: currentRadiusMiles,
+                            grid_size: currentGridSize,
+                            avg_rank: 0,
+                            status: 'pending',
+                            scanned_at: 'Scanning...'
+                        });
+                        setScanStateNote('<i class="bi bi-hourglass-split me-1"></i>Heatmap scan is running. This can take a few minutes for a full grid.', 'is-dirty');
+                        waitForScanCompletion(data.scan_id)
+                            .then(function(scan) {
+                                scanBtn.disabled = false;
+                                document.getElementById('scanSpinner').classList.remove('active');
+                                document.getElementById('scanIcon').style.display = '';
+                                hydrateScan(scan, {fitBounds: true, pan: true});
+                                prependHistoryItem(scan);
+                            })
+                            .catch(function(error) {
+                                scanBtn.disabled = false;
+                                document.getElementById('scanSpinner').classList.remove('active');
+                                document.getElementById('scanIcon').style.display = '';
+                                alert(error.message || 'Heatmap scan failed.');
+                            });
+                        return;
+                    }
+
+                    scanBtn.disabled = false;
+                    document.getElementById('scanSpinner').classList.remove('active');
+                    document.getElementById('scanIcon').style.display = '';
 
                     currentKeyword = keyword;
                     currentResults = data.results || [];
@@ -1698,6 +1781,9 @@ document.addEventListener('DOMContentLoaded', function() {
                     var checks = data.checks;
                     function icon(ok) { return ok ? '<i class="bi bi-check-circle text-success"></i>' : '<i class="bi bi-x-circle text-danger"></i>'; }
                     var html = '';
+                    if (checks.browser_runtime) {
+                        html += icon(checks.browser_runtime.ok) + ' Browser scanner: ' + checks.browser_runtime.detail + '<br>';
+                    }
                     html += icon(checks.places_new.ok) + ' Places API (New): ' + checks.places_new.detail + '<br>';
                     html += icon(checks.places_legacy.ok) + ' Places API (Legacy): ' + checks.places_legacy.detail + '<br>';
                     html += icon(checks.geocoding.ok) + ' Geocoding API: ' + checks.geocoding.detail;
