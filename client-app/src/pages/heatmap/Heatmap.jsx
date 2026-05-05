@@ -984,7 +984,9 @@ export default function Heatmap() {
                     {(debugInfo.place_id_verification?.address || '').toLowerCase().includes('service-area business') && (
                       <p>This linked listing is a service-area business. It may rank in standard Google results while still appearing inconsistently in Google Maps and local-pack results.</p>
                     )}
-                    {brand?.local_falcon_configured ? <p>Local Falcon is configured for full grid ranking scans.</p> : <p>Google rank-only mode is active.</p>}
+                    {debugInfo.local_falcon_error && <p>Local Falcon failed: {debugInfo.local_falcon_error}</p>}
+                    {debugInfo.local_falcon_fallback && <p>{debugInfo.local_falcon_fallback}</p>}
+                    {!debugInfo.local_falcon_error && (brand?.local_falcon_configured ? <p>Local Falcon is configured for full grid ranking scans.</p> : <p>Google rank-only mode is active.</p>)}
                     {debugInfo.keyword_warning && <p>{debugInfo.keyword_warning}</p>}
                   </div>
                 )}

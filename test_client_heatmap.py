@@ -283,6 +283,57 @@ class ClientHeatmapTests(unittest.TestCase):
         mock_verify_place_id.assert_called_once_with("fallback-key", "place-123")
         self.assertEqual(mock_scan_grid.call_args.args[0], "fallback-key")
 
+    @patch("webapp.heatmap.scan_grid_google_rank_only")
+    @patch("webapp.heatmap.scan_grid_local_falcon")
+    @patch("webapp.heatmap.verify_place_id")
+    @patch("webapp.heatmap.calc_search_radius_m")
+    @patch("webapp.heatmap.generate_grid")
+    @patch("webapp.heatmap.clean_keyword")
+    def test_heatmap_scan_falls_back_when_local_falcon_rejects_permission(
+        self,
+        mock_clean_keyword,
+        mock_generate_grid,
+        mock_calc_search_radius_m,
+        mock_verify_place_id,
+        mock_local_falcon,
+        mock_google_rank_only,
+    ):
+        mock_clean_keyword.return_value = ("pet waste removal", False)
+        mock_generate_grid.return_value = [{"row": 0, "col": 0, "lat": 33.5001, "lng": -112.1999}]
+        mock_calc_search_radius_m.return_value = 5000
+        mock_verify_place_id.return_value = {"name": "Heatmap Test Brand Phoenix"}
+        mock_local_falcon.side_effect = RuntimeError(
+            "Local Falcon scan failed: You do not have permission to access Local Falcon On-Demand API endpoints."
+        )
+        mock_google_rank_only.return_value = (
+            [{"row": 0, "col": 0, "lat": 33.5001, "lng": -112.1999, "rank": 4, "competitors": []}],
+            {"rank_provider": "google_rank_only", "places_returned": 10},
+        )
+
+        with self.app.app_context():
+            self.app.db.update_brand_text_field(self.brand_id, "google_place_id", "place-123")
+            self.app.db.update_brand_text_field(self.brand_id, "local_falcon_api_key", "lf-key")
+
+        response = self.client.post(
+            "/client/heatmap/scan",
+            json={
+                "keyword": "pet waste removal",
+                "radius_miles": 3,
+                "grid_size": 3,
+                "center_lat": 33.5001,
+                "center_lng": -112.1999,
+            },
+        )
+        payload = response.get_json()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["results"][0]["rank"], 4)
+        self.assertIn("On-Demand API", payload["debug"]["local_falcon_error"])
+        self.assertEqual(payload["debug"]["api_diagnostics"]["local_falcon"]["fallback"], "google_rank_only")
+        mock_local_falcon.assert_called_once()
+        mock_google_rank_only.assert_called_once()
+
     def test_heatmap_scan_rejects_invalid_custom_center(self):
         response = self.client.post(
             "/client/heatmap/scan",

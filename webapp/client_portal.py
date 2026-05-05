@@ -5472,19 +5472,25 @@ def _finalize_heatmap_scan(*, keyword, api_key, business_name, grid_points, plac
     from webapp.heatmap import scan_grid_google_rank_only, scan_grid_local_falcon, summarize_competitor_landscape
 
     try:
+        local_falcon_error = None
         if local_falcon_api_key:
-            results, debug_info = scan_grid_local_falcon(
-                local_falcon_api_key,
-                keyword,
-                place_id,
-                center_lat if center_lat is not None else business_lat,
-                center_lng if center_lng is not None else business_lng,
-                grid_size or int(len(grid_points) ** 0.5),
-                radius_miles or 5,
-                target_place_ids=target_place_ids,
-                candidate_names=[business_name, *(alternate_names or [])],
-            )
-        else:
+            try:
+                results, debug_info = scan_grid_local_falcon(
+                    local_falcon_api_key,
+                    keyword,
+                    place_id,
+                    center_lat if center_lat is not None else business_lat,
+                    center_lng if center_lng is not None else business_lng,
+                    grid_size or int(len(grid_points) ** 0.5),
+                    radius_miles or 5,
+                    target_place_ids=target_place_ids,
+                    candidate_names=[business_name, *(alternate_names or [])],
+                )
+            except Exception as exc:
+                local_falcon_error = str(exc)
+                current_app.logger.warning("Local Falcon scan failed; falling back to Google rank-only: %s", exc)
+
+        if not local_falcon_api_key or local_falcon_error:
             results, debug_info = scan_grid_google_rank_only(
                 api_key,
                 keyword,
@@ -5496,6 +5502,17 @@ def _finalize_heatmap_scan(*, keyword, api_key, business_name, grid_points, plac
                 brand_query=brand_query,
                 target_place_ids=target_place_ids,
             )
+            if local_falcon_error:
+                debug_info = debug_info or {}
+                diagnostics = debug_info.setdefault("api_diagnostics", {})
+                diagnostics["local_falcon"] = {
+                    "provider": "local_falcon",
+                    "ok": False,
+                    "error": local_falcon_error,
+                    "fallback": "google_rank_only",
+                }
+                debug_info["local_falcon_error"] = local_falcon_error
+                debug_info["local_falcon_fallback"] = "Google rank-only scan used because Local Falcon failed."
     except Exception as exc:
         raise RuntimeError(f"Scan failed: {exc}") from exc
 
@@ -14097,7 +14114,7 @@ def client_heatmap_test_api():
     if local_falcon_key:
         checks["local_falcon"] = {
             "ok": True,
-            "detail": "Configured. Heatmap scans will use Local Falcon as the ranking provider.",
+            "detail": "Token saved. Scans try Local Falcon first and fall back to Google rank-only if On-Demand API access is not allowed.",
         }
     else:
         checks["local_falcon"] = {

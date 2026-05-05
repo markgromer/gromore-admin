@@ -1264,6 +1264,12 @@ function showDebug(debugInfo) {
             '<i class="bi bi-exclamation-triangle me-1"></i> ' + debugInfo.keyword_warning + '</div>' + el.innerHTML;
     }
 
+    if (debugInfo.local_falcon_error) {
+        el.innerHTML += '<br><div style="background:#fff7ed; border:1px solid #fb923c; border-radius:8px; padding:10px; margin-top:8px; color:#9a3412;">' +
+            '<strong>Local Falcon fallback:</strong> ' + escapeHtml(debugInfo.local_falcon_error) +
+            '<br>Google rank-only scan was used instead.</div>';
+    }
+
     if (debugInfo.api_errors) {
         el.innerHTML += '<br><span style="color:#ef4444; font-weight:600;">API errors: ' +
             debugInfo.api_errors + ' / ' + debugInfo.total_points + ' grid points failed. ' +
