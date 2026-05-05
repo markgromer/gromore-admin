@@ -627,59 +627,74 @@ def scan_grid_google_rank_only(api_key, keyword, business_name, grid_points,
                 return result_rank
         return 0
 
+    def _collect_legacy_ids(url_legacy, base_params, provider_name):
+        place_ids = []
+        diag = {"provider": provider_name, "pages": []}
+        params = dict(base_params)
+        for page_index in range(3):
+            if page_index > 0:
+                token = diag.get("next_page_token")
+                if not token:
+                    break
+                # Google pagetokens need a short activation delay before they return data.
+                time.sleep(1.6)
+                params = {"pagetoken": token, "key": api_key}
+
+            resp = requests.get(url_legacy, params=params, timeout=PLACES_REQUEST_TIMEOUT_SECONDS)
+            data = resp.json()
+            page_diag = {
+                "status": resp.status_code,
+                "gstatus": data.get("status"),
+                "error_message": data.get("error_message", ""),
+                "count": len(data.get("results", []) or []),
+            }
+            diag["pages"].append(page_diag)
+            diag.update({
+                "status": resp.status_code,
+                "gstatus": data.get("status"),
+                "error_message": data.get("error_message", ""),
+            })
+
+            page_ids = [
+                _normalize_place_id(item.get("place_id") or "")
+                for item in data.get("results", [])[:20]
+                if _normalize_place_id(item.get("place_id") or "")
+            ]
+            place_ids.extend(page_ids)
+            if _rank_from_ids(place_ids):
+                break
+            diag["next_page_token"] = data.get("next_page_token") or ""
+            if not diag["next_page_token"]:
+                break
+
+        diag["count"] = len(place_ids)
+        return place_ids, diag
+
     def _legacy_rank_only(pt):
-        diag = {"provider": "legacy_text_search_rank_only"}
         params = {
             "query": keyword,
             "location": f"{pt['lat']},{pt['lng']}",
             "radius": int(min(search_radius_m or 2000, 50000)),
             "key": api_key,
         }
-        resp = requests.get(
+        return _collect_legacy_ids(
             "https://maps.googleapis.com/maps/api/place/textsearch/json",
-            params=params,
-            timeout=PLACES_REQUEST_TIMEOUT_SECONDS,
+            params,
+            "legacy_text_search_rank_only",
         )
-        data = resp.json()
-        diag.update({
-            "status": resp.status_code,
-            "gstatus": data.get("status"),
-            "error_message": data.get("error_message", ""),
-        })
-        place_ids = [
-            _normalize_place_id(item.get("place_id") or "")
-            for item in data.get("results", [])[:20]
-            if _normalize_place_id(item.get("place_id") or "")
-        ]
-        diag["count"] = len(place_ids)
-        return place_ids, diag
 
     def _nearby_rank_only(pt):
-        diag = {"provider": "nearby_search_rank_only"}
         params = {
             "keyword": keyword,
             "location": f"{pt['lat']},{pt['lng']}",
             "radius": int(min(search_radius_m or 2000, 50000)),
             "key": api_key,
         }
-        resp = requests.get(
+        return _collect_legacy_ids(
             "https://maps.googleapis.com/maps/api/place/nearbysearch/json",
-            params=params,
-            timeout=PLACES_REQUEST_TIMEOUT_SECONDS,
+            params,
+            "nearby_search_rank_only",
         )
-        data = resp.json()
-        diag.update({
-            "status": resp.status_code,
-            "gstatus": data.get("status"),
-            "error_message": data.get("error_message", ""),
-        })
-        place_ids = [
-            _normalize_place_id(item.get("place_id") or "")
-            for item in data.get("results", [])[:20]
-            if _normalize_place_id(item.get("place_id") or "")
-        ]
-        diag["count"] = len(place_ids)
-        return place_ids, diag
 
     for seq, (idx, pt) in enumerate(ordered):
         if time.time() - scan_started_at > SCAN_MAX_SECONDS:

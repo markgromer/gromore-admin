@@ -606,6 +606,44 @@ class ClientHeatmapTests(unittest.TestCase):
         self.assertEqual(debug["api_diagnostics"]["legacy_rank_only"]["count"], 2)
         self.assertEqual(mock_get.call_args.args[0], "https://maps.googleapis.com/maps/api/place/textsearch/json")
 
+    @patch("webapp.heatmap.time.sleep")
+    @patch("webapp.heatmap.requests.get")
+    @patch("webapp.heatmap.requests.post")
+    def test_google_rank_only_scan_reads_legacy_next_page_token(self, mock_post, mock_get, mock_sleep):
+        new_response = Mock(status_code=200, text='{"places":[]}')
+        new_response.json.return_value = {"places": [{"id": "rival-1"}]}
+        mock_post.return_value = new_response
+
+        first_page = Mock(status_code=200)
+        first_page.json.return_value = {
+            "status": "OK",
+            "next_page_token": "next-token",
+            "results": [{"place_id": f"rival-{index}"} for index in range(1, 21)],
+        }
+        second_page = Mock(status_code=200)
+        second_page.json.return_value = {
+            "status": "OK",
+            "results": [
+                {"place_id": "rival-21"},
+                {"place_id": "place-123"},
+            ],
+        }
+        mock_get.side_effect = [first_page, second_page]
+
+        results, debug = scan_grid_google_rank_only(
+            "maps-key",
+            "plumber",
+            "Heatmap Test Brand",
+            [{"row": 0, "col": 0, "lat": 33.4484, "lng": -112.0740}],
+            place_id="place-123",
+        )
+
+        self.assertEqual(results[0]["rank"], 22)
+        self.assertEqual(debug["rank_provider"], "legacy_rank_only")
+        self.assertEqual(debug["api_diagnostics"]["legacy_rank_only"]["count"], 22)
+        self.assertEqual(mock_get.call_args.kwargs["params"]["pagetoken"], "next-token")
+        mock_sleep.assert_called_once_with(1.6)
+
     @patch("webapp.heatmap.requests.post")
     def test_local_falcon_scan_normalizes_grid_results(self, mock_post):
         response = Mock(status_code=200)
