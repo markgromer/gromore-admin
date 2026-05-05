@@ -132,8 +132,11 @@
             <a class="nav-link {% if request.endpoint in ('feature_flags_page', 'feature_flags_update') %}active{% endif %}" href="{{ url_for('feature_flags_page') }}">
                 <i class="bi bi-toggles"></i> Feature Flags
             </a>
-            <a class="nav-link {% if request.endpoint == 'site_builder_admin' %}active{% endif %}" href="{{ url_for('site_builder_admin') }}">
+            <a class="nav-link {% if request.endpoint == 'site_builder_admin' and request.args.get('tab') != 'docs' %}active{% endif %}" href="{{ url_for('site_builder_admin') }}">
                 <i class="bi bi-palette"></i> Site Builder
+            </a>
+            <a class="nav-link {% if request.endpoint == 'site_builder_admin' and request.args.get('tab') == 'docs' %}active{% endif %}" href="{{ url_for('site_builder_admin', tab='docs') }}">
+                <i class="bi bi-journal-code"></i> Builder Docs
             </a>
             <a class="nav-link {% if request.endpoint == 'setup_guide' %}active{% endif %}" href="{{ url_for('setup_guide') }}">
                 <i class="bi bi-book"></i> Setup Guide

@@ -12,6 +12,7 @@ import hmac
 import logging
 import re
 import secrets
+import html
 from pathlib import Path
 from datetime import datetime, timedelta
 from functools import wraps
@@ -21,6 +22,7 @@ from flask import (
     flash, session, jsonify, send_file, abort, current_app
 )
 from flask_wtf.csrf import CSRFProtect
+from markupsafe import Markup
 from werkzeug.security import generate_password_hash, check_password_hash
 
 from webapp.database import WebDB
@@ -38,6 +40,105 @@ from webapp.social_post_runner import start_background_social_post_runner
 
 BASE_DIR = Path(__file__).parent.parent
 logger = logging.getLogger(__name__)
+
+
+def _render_inline_markdown(text):
+    text = html.escape(str(text or ""))
+    text = re.sub(r"`([^`]+)`", r"<code>\1</code>", text)
+    text = re.sub(r"\*\*([^*]+)\*\*", r"<strong>\1</strong>", text)
+    text = re.sub(
+        r"\[([^\]]+)\]\(([^)]+)\)",
+        lambda m: f'<a href="{html.escape(m.group(2), quote=True)}" target="_blank" rel="noopener">{m.group(1)}</a>',
+        text,
+    )
+    return text
+
+
+def _simple_markdown_to_html(markdown_text):
+    """Small internal-doc renderer so backend guides can live as Markdown without adding a dependency."""
+    lines = str(markdown_text or "").splitlines()
+    html_parts = []
+    in_code = False
+    code_lines = []
+    list_type = None
+    paragraph = []
+
+    def flush_paragraph():
+        nonlocal paragraph
+        if paragraph:
+            html_parts.append(f"<p>{_render_inline_markdown(' '.join(paragraph))}</p>")
+            paragraph = []
+
+    def close_list():
+        nonlocal list_type
+        if list_type:
+            html_parts.append(f"</{list_type}>")
+            list_type = None
+
+    for raw_line in lines:
+        line = raw_line.rstrip()
+        stripped = line.strip()
+
+        if stripped.startswith("```"):
+            if in_code:
+                html_parts.append(f"<pre><code>{html.escape(chr(10).join(code_lines))}</code></pre>")
+                code_lines = []
+                in_code = False
+            else:
+                flush_paragraph()
+                close_list()
+                in_code = True
+            continue
+
+        if in_code:
+            code_lines.append(line)
+            continue
+
+        if not stripped:
+            flush_paragraph()
+            close_list()
+            continue
+
+        heading = re.match(r"^(#{1,4})\s+(.+)$", stripped)
+        if heading:
+            flush_paragraph()
+            close_list()
+            level = len(heading.group(1))
+            content = _render_inline_markdown(heading.group(2))
+            html_parts.append(f"<h{level}>{content}</h{level}>")
+            continue
+
+        unordered = re.match(r"^[-*]\s+(.+)$", stripped)
+        ordered = re.match(r"^\d+\.\s+(.+)$", stripped)
+        if unordered or ordered:
+            flush_paragraph()
+            wanted = "ul" if unordered else "ol"
+            if list_type and list_type != wanted:
+                close_list()
+            if not list_type:
+                list_type = wanted
+                html_parts.append(f"<{list_type}>")
+            content = (unordered or ordered).group(1)
+            html_parts.append(f"<li>{_render_inline_markdown(content)}</li>")
+            continue
+
+        paragraph.append(stripped)
+
+    if in_code:
+        html_parts.append(f"<pre><code>{html.escape(chr(10).join(code_lines))}</code></pre>")
+    flush_paragraph()
+    close_list()
+    return Markup("\n".join(html_parts))
+
+
+def _load_internal_doc_html(filename):
+    path = (BASE_DIR / "docs" / filename).resolve()
+    docs_root = (BASE_DIR / "docs").resolve()
+    if docs_root not in path.parents:
+        abort(404)
+    if not path.exists():
+        return Markup("<p>Internal guide file was not found.</p>")
+    return _simple_markdown_to_html(path.read_text(encoding="utf-8"))
 
 
 def _base64_url_decode(value):
@@ -4533,6 +4634,11 @@ def create_app():
             google_font_choices=GOOGLE_FONT_CHOICES,
             default_acf_field_map_json=client_portal_module._site_builder_json_dumps_pretty(
                 client_portal_module._default_site_builder_acf_field_map()
+            ),
+            wp_template_guide_html=(
+                _load_internal_doc_html("WARREN_WORDPRESS_TEMPLATE_HELP.md")
+                if tab == "docs"
+                else ""
             ),
         )
 

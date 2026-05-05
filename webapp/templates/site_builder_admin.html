@@ -23,6 +23,14 @@
     .cat-pill.active { background: #2563eb; color: #fff; }
     .font-preview { font-size: 1.1rem; font-weight: 600; }
     .stat-mini { font-size: 2rem; font-weight: 700; color: #1a1d2e; }
+    .internal-doc { max-width: 980px; }
+    .internal-doc h1 { font-size: 1.85rem; margin: 0 0 1rem; }
+    .internal-doc h2 { font-size: 1.35rem; margin: 2rem 0 .75rem; padding-top: .75rem; border-top: 1px solid #e5e7eb; }
+    .internal-doc h3 { font-size: 1.08rem; margin: 1.5rem 0 .6rem; }
+    .internal-doc p, .internal-doc li { color: #374151; line-height: 1.65; }
+    .internal-doc pre { background: #0f172a; color: #e5e7eb; border-radius: 8px; padding: 1rem; overflow: auto; }
+    .internal-doc code { background: #eef2ff; color: #3730a3; border-radius: 4px; padding: .1rem .28rem; }
+    .internal-doc pre code { background: transparent; color: inherit; padding: 0; }
 </style>
 {% endblock %}
 
@@ -92,7 +100,40 @@
             <i class="bi bi-images"></i> Images
         </a>
     </li>
+    <li class="nav-item">
+        <a class="nav-link {% if tab == 'docs' %}active{% endif %}" href="?tab=docs">
+            <i class="bi bi-journal-code"></i> Builder Docs
+        </a>
+    </li>
 </ul>
+
+<!-- ============= DOCS TAB ============= -->
+{% if tab == 'docs' %}
+<div class="row">
+    <div class="col-lg-9">
+        <div class="sb-card internal-doc">
+            {{ wp_template_guide_html }}
+        </div>
+    </div>
+    <div class="col-lg-3">
+        <div class="sb-card position-sticky" style="top:1rem;">
+            <h6><i class="bi bi-tools"></i> Use This While Building</h6>
+            <p class="text-muted small">This is backend reference material for creating WordPress page templates, ACF field groups, WARREN site templates, and reusable theme kits.</p>
+            <div class="d-grid gap-2">
+                <a class="btn btn-outline-primary btn-sm" href="{{ url_for('site_builder_admin', tab='site-templates') }}">
+                    <i class="bi bi-window-stack"></i> Site Templates
+                </a>
+                <a class="btn btn-outline-primary btn-sm" href="{{ url_for('site_builder_admin', tab='themes') }}">
+                    <i class="bi bi-brush"></i> Themes
+                </a>
+                <a class="btn btn-outline-primary btn-sm" href="{{ url_for('site_builder_admin', tab='templates') }}">
+                    <i class="bi bi-code-square"></i> Section Templates
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
 
 <!-- ============= TEMPLATES TAB ============= -->
 {% if tab == 'templates' %}
