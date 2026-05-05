@@ -571,6 +571,41 @@ class ClientHeatmapTests(unittest.TestCase):
         self.assertEqual(debug["top_results"][1]["id"], "place-123")
         self.assertEqual(mock_post.call_args.kwargs["headers"]["X-Goog-FieldMask"], "places.id")
 
+    @patch("webapp.heatmap.requests.get")
+    @patch("webapp.heatmap.requests.post")
+    def test_google_rank_only_scan_falls_back_to_legacy_ids_when_primary_misses(self, mock_post, mock_get):
+        new_response = Mock(status_code=200, text='{"places":[]}')
+        new_response.json.return_value = {
+            "places": [
+                {"id": "rival-1"},
+                {"id": "rival-2"},
+            ]
+        }
+        mock_post.return_value = new_response
+
+        legacy_response = Mock(status_code=200)
+        legacy_response.json.return_value = {
+            "status": "OK",
+            "results": [
+                {"place_id": "rival-1"},
+                {"place_id": "place-123"},
+            ],
+        }
+        mock_get.return_value = legacy_response
+
+        results, debug = scan_grid_google_rank_only(
+            "maps-key",
+            "plumber",
+            "Heatmap Test Brand",
+            [{"row": 0, "col": 0, "lat": 33.4484, "lng": -112.0740}],
+            place_id="place-123",
+        )
+
+        self.assertEqual(results[0]["rank"], 2)
+        self.assertEqual(debug["rank_provider"], "legacy_rank_only")
+        self.assertEqual(debug["api_diagnostics"]["legacy_rank_only"]["count"], 2)
+        self.assertEqual(mock_get.call_args.args[0], "https://maps.googleapis.com/maps/api/place/textsearch/json")
+
     @patch("webapp.heatmap.requests.post")
     def test_local_falcon_scan_normalizes_grid_results(self, mock_post):
         response = Mock(status_code=200)

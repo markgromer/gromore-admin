@@ -621,6 +621,66 @@ def scan_grid_google_rank_only(api_key, keyword, business_name, grid_points,
         "Content-Type": "application/json",
     }
 
+    def _rank_from_ids(place_ids):
+        for result_rank, pid in enumerate(place_ids, 1):
+            if pid in normalized_target_ids:
+                return result_rank
+        return 0
+
+    def _legacy_rank_only(pt):
+        diag = {"provider": "legacy_text_search_rank_only"}
+        params = {
+            "query": keyword,
+            "location": f"{pt['lat']},{pt['lng']}",
+            "radius": int(min(search_radius_m or 2000, 50000)),
+            "key": api_key,
+        }
+        resp = requests.get(
+            "https://maps.googleapis.com/maps/api/place/textsearch/json",
+            params=params,
+            timeout=PLACES_REQUEST_TIMEOUT_SECONDS,
+        )
+        data = resp.json()
+        diag.update({
+            "status": resp.status_code,
+            "gstatus": data.get("status"),
+            "error_message": data.get("error_message", ""),
+        })
+        place_ids = [
+            _normalize_place_id(item.get("place_id") or "")
+            for item in data.get("results", [])[:20]
+            if _normalize_place_id(item.get("place_id") or "")
+        ]
+        diag["count"] = len(place_ids)
+        return place_ids, diag
+
+    def _nearby_rank_only(pt):
+        diag = {"provider": "nearby_search_rank_only"}
+        params = {
+            "keyword": keyword,
+            "location": f"{pt['lat']},{pt['lng']}",
+            "radius": int(min(search_radius_m or 2000, 50000)),
+            "key": api_key,
+        }
+        resp = requests.get(
+            "https://maps.googleapis.com/maps/api/place/nearbysearch/json",
+            params=params,
+            timeout=PLACES_REQUEST_TIMEOUT_SECONDS,
+        )
+        data = resp.json()
+        diag.update({
+            "status": resp.status_code,
+            "gstatus": data.get("status"),
+            "error_message": data.get("error_message", ""),
+        })
+        place_ids = [
+            _normalize_place_id(item.get("place_id") or "")
+            for item in data.get("results", [])[:20]
+            if _normalize_place_id(item.get("place_id") or "")
+        ]
+        diag["count"] = len(place_ids)
+        return place_ids, diag
+
     for seq, (idx, pt) in enumerate(ordered):
         if time.time() - scan_started_at > SCAN_MAX_SECONDS:
             raise RuntimeError(f"Heatmap scan exceeded {SCAN_MAX_SECONDS} seconds before completing.")
@@ -647,6 +707,7 @@ def scan_grid_google_rank_only(api_key, keyword, business_name, grid_points,
             "rank_provider": "google_rank_only",
         }
         place_ids = []
+        rank_provider = "google_rank_only"
         try:
             resp = requests.post(url, json=body, headers=headers, timeout=PLACES_REQUEST_TIMEOUT_SECONDS)
             api_diag["google_rank_only"]["status"] = resp.status_code
@@ -668,11 +729,38 @@ def scan_grid_google_rank_only(api_key, keyword, business_name, grid_points,
             log.warning("Google rank-only heatmap error at point %d (%.4f, %.4f): %s",
                         idx, pt["lat"], pt["lng"], exc)
 
-        rank = 0
-        for result_rank, pid in enumerate(place_ids, 1):
-            if pid in normalized_target_ids:
-                rank = result_rank
-                break
+        rank = _rank_from_ids(place_ids)
+        selected_place_ids = place_ids
+
+        if not rank:
+            try:
+                legacy_ids, legacy_diag = _legacy_rank_only(pt)
+                api_diag["legacy_rank_only"] = legacy_diag
+                legacy_rank = _rank_from_ids(legacy_ids)
+                if legacy_rank:
+                    rank = legacy_rank
+                    selected_place_ids = legacy_ids
+                    rank_provider = "legacy_rank_only"
+                else:
+                    nearby_ids, nearby_diag = _nearby_rank_only(pt)
+                    api_diag["nearby_rank_only"] = nearby_diag
+                    nearby_rank = _rank_from_ids(nearby_ids)
+                    if nearby_rank:
+                        rank = nearby_rank
+                        selected_place_ids = nearby_ids
+                        rank_provider = "nearby_rank_only"
+                    elif not selected_place_ids and legacy_ids:
+                        selected_place_ids = legacy_ids
+                        rank_provider = "legacy_rank_only"
+                    elif not selected_place_ids and nearby_ids:
+                        selected_place_ids = nearby_ids
+                        rank_provider = "nearby_rank_only"
+            except Exception as exc:
+                api_diag["rank_only_fallback_error"] = str(exc)
+                log.warning("Google rank-only fallback error at point %d (%.4f, %.4f): %s",
+                            idx, pt["lat"], pt["lng"], exc)
+
+        api_diag["rank_provider"] = rank_provider
 
         if seq == 0:
             debug_sample = {
@@ -682,14 +770,14 @@ def scan_grid_google_rank_only(api_key, keyword, business_name, grid_points,
                 "alternate_names_used": alternate_names or [],
                 "brand_query": brand_query,
                 "search_radius_m": search_radius_m,
-                "rank_provider": "google_rank_only",
-                "places_returned": len(place_ids),
+                "rank_provider": rank_provider,
+                "places_returned": len(selected_place_ids),
                 "debug_point": f"center ({pt['lat']:.4f}, {pt['lng']:.4f})",
-                "top_results": [{"name": "", "id": pid} for pid in place_ids[:10]],
+                "top_results": [{"name": "", "id": pid} for pid in selected_place_ids[:10]],
                 "api_diagnostics": api_diag,
             }
-            log.info("Heatmap debug (center) - rank-only place_id=%s | top IDs: %s | api_diag: %s",
-                     place_id, place_ids[:10], api_diag)
+            log.info("Heatmap debug (center) - rank-only provider=%s place_id=%s | top IDs: %s | api_diag: %s",
+                     rank_provider, place_id, selected_place_ids[:10], api_diag)
 
         results[idx] = {
             "row": pt["row"],
