@@ -131,6 +131,7 @@ function rankColor(rank) {
 function summarizeApiChecks(checks) {
   if (!checks) return null
   return [
+    `Local Falcon: ${checks.local_falcon?.detail || 'Unknown'}`,
     `Browser scanner: ${checks.browser_runtime?.detail || 'Unknown'}`,
     `Places API (New): ${checks.places_new?.detail || 'Unknown'}`,
     `Places API (Legacy): ${checks.places_legacy?.detail || 'Unknown'}`,
@@ -984,6 +985,7 @@ export default function Heatmap() {
                     {(debugInfo.place_id_verification?.address || '').toLowerCase().includes('service-area business') && (
                       <p>This linked listing is a service-area business. It may rank in standard Google results while still appearing inconsistently in Google Maps and local-pack results.</p>
                     )}
+                    {brand?.local_falcon_configured && <p>Local Falcon is configured for ranking scans.</p>}
                     {debugInfo.keyword_warning && <p>{debugInfo.keyword_warning}</p>}
                   </div>
                 )}

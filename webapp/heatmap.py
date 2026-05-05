@@ -24,6 +24,7 @@ BROWSER_SCROLL_PAUSE_MS = 350
 BROWSER_SCROLL_PASSES = 2
 PLACES_REQUEST_TIMEOUT_SECONDS = 8
 SCAN_MAX_SECONDS = 240
+LOCAL_FALCON_SCAN_TIMEOUT_SECONDS = 300
 
 # Phrases that are redundant when we already pass lat/lng + radius to the API
 _LOCATION_NOISE = re.compile(
@@ -476,6 +477,111 @@ def _search_places(api_key, keyword, lat, lng, radius_m=2000, brand_query=False,
             return best_places, diag
 
     return all_places, diag
+
+
+def scan_grid_local_falcon(api_key, keyword, place_id, center_lat, center_lng, grid_size,
+                           radius_miles, target_place_ids=None, candidate_names=None):
+    """Run a real Local Falcon Google Maps geo-grid scan and normalize it."""
+    if not api_key:
+        raise RuntimeError("Local Falcon API key is not configured.")
+    normalized_place_id = _normalize_place_id(place_id)
+    if not normalized_place_id:
+        raise RuntimeError("Local Falcon scans require a linked Google Place ID.")
+
+    payload = {
+        "api_key": api_key,
+        "place_id": normalized_place_id,
+        "keyword": keyword,
+        "lat": str(center_lat),
+        "lng": str(center_lng),
+        "grid_size": str(int(grid_size)),
+        "radius": str(float(radius_miles)),
+        "measurement": "mi",
+    }
+    resp = requests.post(
+        "https://api.localfalcon.com/v1/scan/",
+        data=payload,
+        timeout=LOCAL_FALCON_SCAN_TIMEOUT_SECONDS,
+    )
+    try:
+        data = resp.json()
+    except Exception as exc:
+        raise RuntimeError(f"Local Falcon returned non-JSON response HTTP {resp.status_code}: {resp.text[:200]}") from exc
+
+    if resp.status_code != 200 or not data.get("success"):
+        message = data.get("message") or data.get("code_desc") or resp.text[:200]
+        raise RuntimeError(f"Local Falcon scan failed: {message}")
+
+    scan_data = data.get("data") or {}
+    raw_results = scan_data.get("results") or []
+    normalized_target_ids = {
+        _normalize_place_id(value)
+        for value in [normalized_place_id, *(target_place_ids or [])]
+        if _normalize_place_id(value)
+    }
+    names = candidate_names or []
+
+    results = []
+    for index, point in enumerate(raw_results):
+        rank_value = point.get("rank")
+        try:
+            rank = int(rank_value) if rank_value not in (False, None, "") else 0
+        except (TypeError, ValueError):
+            rank = 0
+
+        competitors = []
+        for comp in (point.get("results") or [])[:10]:
+            comp_place_id = _normalize_place_id(comp.get("place_id") or "")
+            comp_name = (comp.get("business") or "").strip()
+            competitors.append({
+                "rank": int(comp.get("rank") or len(competitors) + 1),
+                "name": comp_name,
+                "place_id": comp_place_id,
+                "address": (comp.get("address") or "").strip(),
+                "is_target": bool(
+                    (comp_place_id and comp_place_id in normalized_target_ids) or
+                    _matches_candidate_name(comp_name, names)
+                ),
+            })
+
+        results.append({
+            "row": index // int(grid_size),
+            "col": index % int(grid_size),
+            "lat": float(point.get("lat") or 0),
+            "lng": float(point.get("lng") or 0),
+            "rank": rank,
+            "competitors": competitors,
+        })
+
+    debug = {
+        "business_name_used": names[0] if names else "",
+        "place_id_used": normalized_place_id,
+        "target_place_ids_used": sorted(normalized_target_ids),
+        "alternate_names_used": names[1:] if len(names) > 1 else [],
+        "brand_query": False,
+        "rank_provider": "local_falcon",
+        "places_returned": len(raw_results[0].get("results") or []) if raw_results else 0,
+        "debug_point": "center via Local Falcon",
+        "top_results": [
+            {
+                "name": (item.get("business") or ""),
+                "id": item.get("place_id") or "",
+            }
+            for item in ((raw_results[0] or {}).get("results") or [])[:10]
+        ] if raw_results else [],
+        "api_diagnostics": {
+            "local_falcon": {
+                "provider": "local_falcon",
+                "points": scan_data.get("points") or len(results),
+                "found": scan_data.get("found"),
+                "percent": scan_data.get("percent"),
+                "arp": scan_data.get("arp"),
+                "atrp": scan_data.get("atrp"),
+                "solv": scan_data.get("solv"),
+            }
+        },
+    }
+    return results, debug
 
 
 def _tokenize(name):

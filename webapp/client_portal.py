@@ -5467,21 +5467,35 @@ def _serialize_heatmap_scan(scan, include_results=False):
 def _finalize_heatmap_scan(*, keyword, api_key, business_name, grid_points, place_id,
                            search_radius, alternate_names, brand_query, place_verification,
                            business_lat, business_lng, keyword_warning, keyword_was_cleaned,
-                           target_place_ids=None):
-    from webapp.heatmap import scan_grid, summarize_competitor_landscape
+                           target_place_ids=None, local_falcon_api_key="", grid_size=None,
+                           radius_miles=None, center_lat=None, center_lng=None):
+    from webapp.heatmap import scan_grid, scan_grid_local_falcon, summarize_competitor_landscape
 
     try:
-        results, debug_info = scan_grid(
-            api_key,
-            keyword,
-            business_name,
-            grid_points,
-            place_id=place_id,
-            search_radius_m=search_radius,
-            alternate_names=alternate_names,
-            brand_query=brand_query,
-            target_place_ids=target_place_ids,
-        )
+        if local_falcon_api_key:
+            results, debug_info = scan_grid_local_falcon(
+                local_falcon_api_key,
+                keyword,
+                place_id,
+                center_lat if center_lat is not None else business_lat,
+                center_lng if center_lng is not None else business_lng,
+                grid_size or int(len(grid_points) ** 0.5),
+                radius_miles or 5,
+                target_place_ids=target_place_ids,
+                candidate_names=[business_name, *(alternate_names or [])],
+            )
+        else:
+            results, debug_info = scan_grid(
+                api_key,
+                keyword,
+                business_name,
+                grid_points,
+                place_id=place_id,
+                search_radius_m=search_radius,
+                alternate_names=alternate_names,
+                brand_query=brand_query,
+                target_place_ids=target_place_ids,
+            )
     except Exception as exc:
         raise RuntimeError(f"Scan failed: {exc}") from exc
 
@@ -5573,6 +5587,17 @@ def _resolve_brand_maps_api_key(db, brand):
     ).strip()
 
 
+def _resolve_local_falcon_api_key(db, brand=None):
+    brand = brand or {}
+    return (
+        brand.get("local_falcon_api_key")
+        or os.environ.get("LOCAL_FALCON_API_KEY")
+        or db.get_setting("local_falcon_api_key")
+        or db.get_setting("localfalcon_api_key")
+        or ""
+    ).strip()
+
+
 def _hydrate_heatmap_brand(db, brand):
     if not brand:
         return None
@@ -5639,6 +5664,7 @@ def api_heatmap_state():
             "business_lng": float(brand.get("business_lng") or 0),
             "google_maps_api_key": brand.get("google_maps_api_key", ""),
             "google_place_id": brand.get("google_place_id", ""),
+            "local_falcon_configured": bool(_resolve_local_falcon_api_key(db, brand)),
         },
         scans=[_serialize_heatmap_scan(scan, include_results=False) for scan in scans],
         active_scan=active_scan,
@@ -13915,11 +13941,16 @@ def client_heatmap_scan():
     scan_kwargs = {
         "keyword": keyword,
         "api_key": api_key,
+        "local_falcon_api_key": _resolve_local_falcon_api_key(db, brand),
         "business_name": business_name,
         "grid_points": grid_points,
         "place_id": place_id,
         "target_place_ids": [place_id] if place_id else [],
         "search_radius": search_radius,
+        "grid_size": grid_size,
+        "radius_miles": radius,
+        "center_lat": scan_center_lat,
+        "center_lng": scan_center_lng,
         "alternate_names": alternate_names,
         "brand_query": keyword_brand_query,
         "place_verification": place_verification,
@@ -14051,6 +14082,18 @@ def client_heatmap_test_api():
     except Exception as exc:
         checks["places_legacy"] = {"ok": False, "detail": str(exc)}
 
+    local_falcon_key = _resolve_local_falcon_api_key(db, brand)
+    if local_falcon_key:
+        checks["local_falcon"] = {
+            "ok": True,
+            "detail": "Configured. Heatmap scans will use Local Falcon as the ranking provider.",
+        }
+    else:
+        checks["local_falcon"] = {
+            "ok": False,
+            "detail": "Not configured. Set LOCAL_FALCON_API_KEY to use real Local Falcon grid scans.",
+        }
+
     # Test 4: Server browser runtime used by the actual heatmap scanner
     try:
         import os as _os
@@ -14072,7 +14115,7 @@ def client_heatmap_test_api():
     except Exception as exc:
         checks["browser_runtime"] = {"ok": False, "detail": str(exc)[:500]}
 
-    all_ok = all(c["ok"] for c in checks.values())
+    all_ok = all(c["ok"] for key, c in checks.items() if key != "local_falcon")
     any_places = checks.get("places_new", {}).get("ok") or checks.get("places_legacy", {}).get("ok")
     return jsonify(ok=True, all_ok=all_ok, any_places=any_places, checks=checks)
 

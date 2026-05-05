@@ -10,6 +10,7 @@ from webapp.heatmap import (
     _normalize_browser_maps_result,
     _search_places,
     scan_grid,
+    scan_grid_local_falcon,
     summarize_competitor_landscape,
 )
 
@@ -543,6 +544,53 @@ class ClientHeatmapTests(unittest.TestCase):
         self.assertEqual(results[0]["competitors"][0]["place_id"], "place-123")
         self.assertTrue(results[0]["competitors"][0]["is_target"])
         self.assertEqual(debug["rank_provider"], "legacy_api")
+
+    @patch("webapp.heatmap.requests.post")
+    def test_local_falcon_scan_normalizes_grid_results(self, mock_post):
+        response = Mock(status_code=200)
+        response.json.return_value = {
+            "success": True,
+            "data": {
+                "points": 1,
+                "found": 1,
+                "percent": 100,
+                "arp": 2,
+                "atrp": 2,
+                "solv": 5,
+                "results": [
+                    {
+                        "lat": 33.4484,
+                        "lng": -112.0740,
+                        "found": True,
+                        "rank": 2,
+                        "count": 2,
+                        "results": [
+                            {"rank": 1, "place_id": "rival-1", "business": "Rival Plumbing", "address": "123 Main St"},
+                            {"rank": 2, "place_id": "place-123", "business": "Heatmap Test Brand Phoenix", "address": "456 Oak Ave"},
+                        ],
+                    }
+                ],
+            },
+        }
+        mock_post.return_value = response
+
+        results, debug = scan_grid_local_falcon(
+            "lf-key",
+            "plumber",
+            "place-123",
+            33.4484,
+            -112.0740,
+            1,
+            3,
+            candidate_names=["Heatmap Test Brand", "Heatmap Test Brand Phoenix"],
+        )
+
+        self.assertEqual(results[0]["rank"], 2)
+        self.assertEqual(results[0]["competitors"][1]["place_id"], "place-123")
+        self.assertTrue(results[0]["competitors"][1]["is_target"])
+        self.assertEqual(debug["rank_provider"], "local_falcon")
+        self.assertEqual(debug["api_diagnostics"]["local_falcon"]["solv"], 5)
+        self.assertEqual(mock_post.call_args.kwargs["data"]["measurement"], "mi")
 
     @patch("webapp.heatmap.scan_grid")
     @patch("webapp.heatmap.verify_place_id")

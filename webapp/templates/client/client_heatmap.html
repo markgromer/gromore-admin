@@ -1781,6 +1781,9 @@ document.addEventListener('DOMContentLoaded', function() {
                     var checks = data.checks;
                     function icon(ok) { return ok ? '<i class="bi bi-check-circle text-success"></i>' : '<i class="bi bi-x-circle text-danger"></i>'; }
                     var html = '';
+                    if (checks.local_falcon) {
+                        html += icon(checks.local_falcon.ok) + ' Local Falcon: ' + checks.local_falcon.detail + '<br>';
+                    }
                     if (checks.browser_runtime) {
                         html += icon(checks.browser_runtime.ok) + ' Browser scanner: ' + checks.browser_runtime.detail + '<br>';
                     }
