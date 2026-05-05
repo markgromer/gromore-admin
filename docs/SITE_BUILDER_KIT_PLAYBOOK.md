@@ -15,6 +15,7 @@ This is different from the asset-pack spec.
 - [SITE_BUILDER_ASSET_PACK_SPEC.md](SITE_BUILDER_ASSET_PACK_SPEC.md) explains the raw assets and handoff structure.
 - This playbook explains how those assets become a live Warren site kit in the database and builder flow.
 - [SITE_BUILDER_KIT_BRIEF_TEMPLATE.md](SITE_BUILDER_KIT_BRIEF_TEMPLATE.md) is the blank fill-in brief you can use to define a new kit quickly.
+- [WARREN_WORDPRESS_TEMPLATE_HELP.md](WARREN_WORDPRESS_TEMPLATE_HELP.md) explains how to turn approved WordPress designs into reusable WARREN templates with page-template slugs and ACF field maps.
 
 ## 1. What a kit is in the current system
 
