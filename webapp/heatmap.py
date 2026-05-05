@@ -870,6 +870,9 @@ def scan_grid(api_key, keyword, business_name, grid_points,
     except Exception as exc:
         browser_error = str(exc)
 
+    if browser is None and ordered and browser_error:
+        raise RuntimeError(f"Google Maps browser engine unavailable: {browser_error}")
+
     if browser is None and ordered:
         for seq, (idx, pt) in enumerate(ordered):
             if seq > 0:
