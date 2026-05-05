@@ -9,6 +9,7 @@ from webapp.heatmap import (
     _match_business,
     _normalize_browser_maps_result,
     _search_places,
+    scan_grid,
     summarize_competitor_landscape,
 )
 
@@ -410,6 +411,138 @@ class ClientHeatmapTests(unittest.TestCase):
         self.assertEqual(len(places), 1)
         self.assertEqual(places[0]["id"], "place-123")
         self.assertEqual(diag["find_place"]["count"], 1)
+
+    @patch("webapp.heatmap.requests.get")
+    @patch("webapp.heatmap.requests.post")
+    def test_search_places_selects_provider_where_target_matches(self, mock_post, mock_get):
+        new_resp = Mock(status_code=200, text='{}')
+        new_resp.json.return_value = {
+            "places": [
+                {"id": "other-1", "displayName": {"text": "Other Plumbing"}},
+                {"id": "other-2", "displayName": {"text": "Second Plumbing"}},
+            ]
+        }
+        mock_post.return_value = new_resp
+
+        legacy_resp = Mock(status_code=200)
+        legacy_resp.raise_for_status.return_value = None
+        legacy_resp.json.return_value = {
+            "status": "OK",
+            "results": [
+                {"place_id": "place-123", "name": "Heatmap Test Brand Phoenix", "formatted_address": "456 Oak Ave"},
+                {"place_id": "other-3", "name": "Third Plumbing", "formatted_address": "789 Elm St"},
+            ],
+        }
+
+        nearby_resp = Mock(status_code=200)
+        nearby_resp.raise_for_status.return_value = None
+        nearby_resp.json.return_value = {"status": "ZERO_RESULTS", "results": []}
+        mock_get.side_effect = [legacy_resp, nearby_resp]
+
+        places, diag = _search_places(
+            "maps-key",
+            "plumber",
+            33.4484,
+            -112.0740,
+            radius_m=5000,
+            match_business_name="Heatmap Test Brand",
+            match_place_id="place-123",
+            match_alternate_names=["Heatmap Test Brand Phoenix"],
+        )
+
+        self.assertEqual(places[0]["id"], "place-123")
+        self.assertEqual(diag["selected_provider"]["provider"], "legacy_api")
+        self.assertEqual(diag["selected_provider"]["target_rank"], 1)
+
+    def test_scan_grid_uses_places_when_browser_misses_linked_target(self):
+        class FakeLocator:
+            @property
+            def first(self):
+                return self
+
+            def wait_for(self, **_kwargs):
+                return None
+
+            def count(self):
+                return 1
+
+            def evaluate(self, *_args, **_kwargs):
+                return None
+
+        class FakePage:
+            def goto(self, *_args, **_kwargs):
+                return None
+
+            def wait_for_load_state(self, *_args, **_kwargs):
+                return None
+
+            def locator(self, *_args, **_kwargs):
+                return FakeLocator()
+
+            def wait_for_timeout(self, *_args, **_kwargs):
+                return None
+
+            def evaluate(self, *_args, **_kwargs):
+                return [{
+                    "rank": 1,
+                    "name": "Other Plumbing",
+                    "href": "https://www.google.com/maps/place/Other",
+                    "aria": "Other Plumbing",
+                    "text": "Other Plumbing 123 Main St",
+                }]
+
+            def title(self):
+                return "Google Maps"
+
+        class FakeContext:
+            def set_geolocation(self, _location):
+                return None
+
+            def new_page(self):
+                return FakePage()
+
+        class FakeBrowser:
+            def new_context(self, **_kwargs):
+                return FakeContext()
+
+        class FakeChromium:
+            def launch(self, **_kwargs):
+                return FakeBrowser()
+
+        class FakePlaywright:
+            chromium = FakeChromium()
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+        mock_search_places = Mock()
+        with patch("importlib.import_module") as mock_import_module, \
+                patch.dict(scan_grid.__globals__, {"_search_places": mock_search_places}):
+            mock_import_module.return_value = Mock(sync_playwright=lambda: FakePlaywright())
+            mock_search_places.return_value = (
+                [{"id": "place-123", "displayName": {"text": "Heatmap Test Brand Phoenix"}, "formattedAddress": "456 Oak Ave"}],
+                {"selected_provider": {"provider": "legacy_api", "target_rank": 1}, "legacy_api": {"count": 1}},
+            )
+
+            results, debug = scan_grid(
+                "maps-key",
+                "plumber",
+                "Heatmap Test Brand",
+                [{"row": 0, "col": 0, "lat": 33.4484, "lng": -112.0740}],
+                place_id="place-123",
+                alternate_names=["Heatmap Test Brand Phoenix"],
+                target_place_ids=["place-123"],
+            )
+
+            mock_search_places.assert_called_once()
+
+        self.assertEqual(results[0]["rank"], 1)
+        self.assertEqual(results[0]["competitors"][0]["place_id"], "place-123")
+        self.assertTrue(results[0]["competitors"][0]["is_target"])
+        self.assertEqual(debug["rank_provider"], "legacy_api")
 
     @patch("webapp.heatmap.scan_grid")
     @patch("webapp.heatmap.verify_place_id")

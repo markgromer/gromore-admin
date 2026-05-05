@@ -978,6 +978,7 @@ export default function Heatmap() {
                     <div className={styles.debugLabel}>Last scan</div>
                     <p>Matched listing: {debugInfo.business_name_used || 'Unknown'}</p>
                     <p>Place ID: {debugInfo.place_id_used || 'Not linked'}</p>
+                    <p>Rank provider: {debugInfo.rank_provider || 'Unknown'}</p>
                     <p>Results returned at sample point: {debugInfo.places_returned ?? 0}</p>
                     {(debugInfo.place_id_verification?.address || '').toLowerCase().includes('service-area business') && (
                       <p>This linked listing is a service-area business. It may rank in standard Google results while still appearing inconsistently in Google Maps and local-pack results.</p>

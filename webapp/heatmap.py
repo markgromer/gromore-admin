@@ -301,17 +301,22 @@ def _search_google_maps_page(page, keyword, lat, lng, radius_m=2000, max_results
     diag["browser_maps"]["top_names"] = [place.get("displayName", {}).get("text", "") for place in places[:5]]
     return places, diag
 
-def _search_places(api_key, keyword, lat, lng, radius_m=2000, brand_query=False, fallback_queries=None):
+def _search_places(api_key, keyword, lat, lng, radius_m=2000, brand_query=False, fallback_queries=None,
+                   match_business_name=None, match_place_id=None, match_alternate_names=None,
+                   target_place_ids=None):
     """Query Google Places APIs for a keyword near a point.
     Tries all available APIs and merges results (de-duplicated by place_id).
     This is critical because SABs often appear in Legacy/Nearby but not New API.
     Returns (places_list, diag_dict)."""
     diag = {"new_api": None, "legacy_api": None, "nearby_api": None, "find_place": None}
     all_places = []
+    provider_places = []
     seen_ids = set()
 
-    def _add_places(new_places):
+    def _add_places(new_places, provider=None):
         """Merge new places into all_places, skipping duplicates by ID."""
+        if provider:
+            provider_places.append((provider, list(new_places or [])))
         for p in new_places:
             pid = p.get("id", "")
             if pid and pid in seen_ids:
@@ -343,7 +348,7 @@ def _search_places(api_key, keyword, lat, lng, radius_m=2000, brand_query=False,
         diag["new_api"] = {"status": resp.status_code, "body": resp_body}
         if resp.status_code == 200:
             places = resp.json().get("places", [])
-            _add_places(places)
+            _add_places(places, "new_api")
             diag["new_api"]["count"] = len(places)
         else:
             log.info("Places API (New) returned %s. Body: %s",
@@ -374,7 +379,7 @@ def _search_places(api_key, keyword, lat, lng, radius_m=2000, brand_query=False,
                 "id": r.get("place_id", ""),
                 "formattedAddress": r.get("formatted_address", ""),
             })
-        _add_places(legacy_places)
+        _add_places(legacy_places, "legacy_api")
         diag["legacy_api"]["count"] = len(legacy_places)
     except Exception as exc:
         diag["legacy_api"] = {"error": str(exc)}
@@ -402,7 +407,7 @@ def _search_places(api_key, keyword, lat, lng, radius_m=2000, brand_query=False,
                 "id": r.get("place_id", ""),
                 "formattedAddress": r.get("formatted_address", ""),
             })
-        _add_places(nearby_places)
+        _add_places(nearby_places, "nearby_api")
         diag["nearby_api"]["count"] = len(nearby_places)
     except Exception as exc:
         diag["nearby_api"] = {"error": str(exc)}
@@ -421,13 +426,13 @@ def _search_places(api_key, keyword, lat, lng, radius_m=2000, brand_query=False,
                 candidates, attempt = _find_place_candidates(api_key, fallback_query, lat=lat, lng=lng, use_bias=True)
                 attempt["mode"] = "biased"
                 attempted.append(attempt)
-                _add_places(candidates)
+                _add_places(candidates, "find_place")
                 if candidates:
                     break
                 candidates, attempt = _find_place_candidates(api_key, fallback_query, lat=lat, lng=lng, use_bias=False)
                 attempt["mode"] = "global"
                 attempted.append(attempt)
-                _add_places(candidates)
+                _add_places(candidates, "find_place")
                 if candidates:
                     break
             except Exception as exc:
@@ -437,6 +442,31 @@ def _search_places(api_key, keyword, lat, lng, radius_m=2000, brand_query=False,
             "attempts": attempted,
             "count": len(all_places),
         }
+
+    if match_business_name or match_place_id or target_place_ids:
+        best_provider = None
+        best_rank = 0
+        best_places = None
+        for provider, places in provider_places:
+            rank = _match_business(
+                places,
+                match_business_name or "",
+                match_place_id,
+                alternate_names=match_alternate_names,
+                target_place_ids=target_place_ids,
+            )
+            if rank and (not best_rank or rank < best_rank):
+                best_provider = provider
+                best_rank = rank
+                best_places = places
+
+        if best_places is not None:
+            diag["selected_provider"] = {
+                "provider": best_provider,
+                "target_rank": best_rank,
+                "reason": "target_match",
+            }
+            return best_places, diag
 
     return all_places, diag
 
@@ -529,9 +559,13 @@ def _matches_candidate_name(place_name, candidate_names):
     return False
 
 
-def _extract_competitors(places, place_id=None, candidate_names=None, limit=10):
+def _extract_competitors(places, place_id=None, candidate_names=None, target_place_ids=None, limit=10):
     """Build a Local Falcon-style ranked pack for one grid point."""
-    normalized_target_id = _normalize_place_id(place_id)
+    normalized_target_ids = {
+        _normalize_place_id(value)
+        for value in [place_id, *(target_place_ids or [])]
+        if _normalize_place_id(value)
+    }
     competitors = []
     for index, place in enumerate(places[:max(limit, 1)], 1):
         place_name = (place.get("displayName", {}).get("text", "") or "").strip()
@@ -542,7 +576,7 @@ def _extract_competitors(places, place_id=None, candidate_names=None, limit=10):
             "place_id": normalized_place_id,
             "address": (place.get("formattedAddress", "") or "").strip(),
             "is_target": bool(
-                (normalized_target_id and normalized_place_id == normalized_target_id) or
+                (normalized_place_id and normalized_place_id in normalized_target_ids) or
                 _matches_candidate_name(place_name, candidate_names)
             ),
         })
@@ -585,12 +619,16 @@ def summarize_competitor_landscape(results):
     return leaderboard[:12]
 
 
-def _match_business(places, business_name, place_id=None, alternate_names=None):
+def _match_business(places, business_name, place_id=None, alternate_names=None, target_place_ids=None):
     """Find the rank (1-based) of a business in Places results.
     Matches by place_id first, then exact substring, then word overlap,
     then fuzzy single-word match."""
     stop_words = {'the', 'and', 'of', 'in', 'at', 'for', 'a', 'an', 'llc', 'inc', 'co'}
-    target_place_id = _normalize_place_id(place_id)
+    target_place_ids = {
+        _normalize_place_id(value)
+        for value in [place_id, *(target_place_ids or [])]
+        if _normalize_place_id(value)
+    }
 
     candidate_names = []
     seen_names = set()
@@ -613,7 +651,7 @@ def _match_business(places, business_name, place_id=None, alternate_names=None):
         ptokens = _tokenize(pname) - stop_words
 
         # Exact place_id match
-        if target_place_id and pid == target_place_id:
+        if pid and pid in target_place_ids:
             return i
 
         for candidate in candidate_names:
@@ -643,7 +681,8 @@ def _match_business(places, business_name, place_id=None, alternate_names=None):
 
 
 def scan_grid(api_key, keyword, business_name, grid_points,
-              place_id=None, search_radius_m=2000, alternate_names=None, brand_query=False):
+              place_id=None, search_radius_m=2000, alternate_names=None, brand_query=False,
+              target_place_ids=None):
     """Run a full grid scan. Returns list of point dicts with 'rank' added.
     Queries the center point first for reliable diagnostics."""
     grid_size = int(math.sqrt(len(grid_points))) if grid_points else 0
@@ -662,6 +701,75 @@ def scan_grid(api_key, keyword, business_name, grid_points,
     debug_sample = None
     errors = 0
     candidate_names = [business_name, *(alternate_names or [])]
+    normalized_target_ids = {
+        _normalize_place_id(value)
+        for value in [place_id, *(target_place_ids or [])]
+        if _normalize_place_id(value)
+    }
+
+    def _empty_result(pt):
+        return {
+            "row": pt["row"],
+            "col": pt["col"],
+            "lat": pt["lat"],
+            "lng": pt["lng"],
+            "rank": 0,
+            "competitors": [],
+        }
+
+    def _search_point(page_obj, context_obj, pt):
+        """Return ranked places for one grid point, switching providers when needed."""
+        api_diag = {}
+        rank_provider = "browser_maps"
+        places = []
+
+        if page_obj is not None and context_obj is not None:
+            context_obj.set_geolocation({"latitude": pt["lat"], "longitude": pt["lng"]})
+            places, api_diag = _search_google_maps_page(
+                page_obj,
+                keyword,
+                pt["lat"],
+                pt["lng"],
+                radius_m=search_radius_m,
+            )
+
+        browser_rank = _match_business(
+            places,
+            business_name,
+            place_id,
+            alternate_names=alternate_names,
+            target_place_ids=normalized_target_ids,
+        )
+        should_try_places = bool(api_key) and (not places or not browser_rank)
+
+        if should_try_places:
+            fallback_places, fallback_diag = _search_places(
+                api_key,
+                keyword,
+                pt["lat"],
+                pt["lng"],
+                radius_m=search_radius_m,
+                brand_query=brand_query,
+                fallback_queries=candidate_names,
+                match_business_name=business_name,
+                match_place_id=place_id,
+                match_alternate_names=alternate_names,
+                target_place_ids=normalized_target_ids,
+            )
+            api_diag.update(fallback_diag)
+            fallback_rank = _match_business(
+                fallback_places,
+                business_name,
+                place_id,
+                alternate_names=alternate_names,
+                target_place_ids=normalized_target_ids,
+            )
+            if fallback_places and (not places or (not browser_rank and fallback_rank)):
+                places = fallback_places
+                rank_provider = api_diag.get("selected_provider", {}).get("provider") or "places_fallback"
+
+        api_diag["rank_provider"] = rank_provider
+        return places, api_diag
     browser = None
     context = None
     page = None
@@ -684,21 +792,7 @@ def scan_grid(api_key, keyword, business_name, grid_points,
                 if seq > 0:
                     time.sleep(0.35)
                 try:
-                    context.set_geolocation({"latitude": pt["lat"], "longitude": pt["lng"]})
-                    places, api_diag = _search_google_maps_page(page, keyword, pt["lat"], pt["lng"], radius_m=search_radius_m)
-                    if not places and api_key:
-                        fallback_places, fallback_diag = _search_places(
-                            api_key,
-                            keyword,
-                            pt["lat"],
-                            pt["lng"],
-                            radius_m=search_radius_m,
-                            brand_query=brand_query,
-                            fallback_queries=candidate_names,
-                        )
-                        if fallback_places:
-                            places = fallback_places
-                        api_diag.update(fallback_diag)
+                    places, api_diag = _search_point(page, context, pt)
                 except Exception as exc:
                     log.warning("scan_grid: browser search error at point %d (%.4f, %.4f): %s",
                                 idx, pt["lat"], pt["lng"], exc)
@@ -713,8 +807,13 @@ def scan_grid(api_key, keyword, business_name, grid_points,
                                 radius_m=search_radius_m,
                                 brand_query=brand_query,
                                 fallback_queries=candidate_names,
+                                match_business_name=business_name,
+                                match_place_id=place_id,
+                                match_alternate_names=alternate_names,
+                                target_place_ids=normalized_target_ids,
                             )
                             api_diag.setdefault("browser_maps", {"error": str(exc)})
+                            api_diag["rank_provider"] = api_diag.get("selected_provider", {}).get("provider") or "places_fallback"
                         except Exception as fallback_exc:
                             log.warning("scan_grid: fallback API error at point %d (%.4f, %.4f): %s",
                                         idx, pt["lat"], pt["lng"], fallback_exc)
@@ -724,15 +823,28 @@ def scan_grid(api_key, keyword, business_name, grid_points,
                         places, api_diag = [], {"browser_maps": {"error": str(exc)}}
                         errors += 1
 
-                rank = _match_business(places, business_name, place_id, alternate_names=alternate_names)
-                competitors = _extract_competitors(places, place_id=place_id, candidate_names=candidate_names)
+                rank = _match_business(
+                    places,
+                    business_name,
+                    place_id,
+                    alternate_names=alternate_names,
+                    target_place_ids=normalized_target_ids,
+                )
+                competitors = _extract_competitors(
+                    places,
+                    place_id=place_id,
+                    candidate_names=candidate_names,
+                    target_place_ids=normalized_target_ids,
+                )
                 if seq == 0:
                     debug_sample = {
                         "business_name_used": business_name,
                         "place_id_used": place_id,
+                        "target_place_ids_used": sorted(normalized_target_ids),
                         "alternate_names_used": alternate_names or [],
                         "brand_query": brand_query,
                         "search_radius_m": search_radius_m,
+                        "rank_provider": api_diag.get("rank_provider"),
                         "places_returned": len(places),
                         "debug_point": f"center ({pt['lat']:.4f}, {pt['lng']:.4f})",
                         "top_results": [
@@ -763,25 +875,48 @@ def scan_grid(api_key, keyword, business_name, grid_points,
             if seq > 0:
                 time.sleep(0.35)
             try:
-                places, api_diag = _search_places(api_key, keyword, pt["lat"], pt["lng"],
-                                                  radius_m=search_radius_m,
-                                                  brand_query=brand_query,
-                                                  fallback_queries=candidate_names)
+                places, api_diag = _search_places(
+                    api_key,
+                    keyword,
+                    pt["lat"],
+                    pt["lng"],
+                    radius_m=search_radius_m,
+                    brand_query=brand_query,
+                    fallback_queries=candidate_names,
+                    match_business_name=business_name,
+                    match_place_id=place_id,
+                    match_alternate_names=alternate_names,
+                    target_place_ids=normalized_target_ids,
+                )
                 api_diag.setdefault("browser_maps", {"error": browser_error or "Playwright unavailable"})
+                api_diag["rank_provider"] = api_diag.get("selected_provider", {}).get("provider") or "places_fallback"
             except Exception as exc:
                 log.warning("scan_grid: API error at point %d (%.4f, %.4f): %s",
                             idx, pt["lat"], pt["lng"], exc)
                 places, api_diag = [], {"browser_maps": {"error": browser_error or "Playwright unavailable"}, "error": str(exc)}
                 errors += 1
-            rank = _match_business(places, business_name, place_id, alternate_names=alternate_names)
-            competitors = _extract_competitors(places, place_id=place_id, candidate_names=candidate_names)
+            rank = _match_business(
+                places,
+                business_name,
+                place_id,
+                alternate_names=alternate_names,
+                target_place_ids=normalized_target_ids,
+            )
+            competitors = _extract_competitors(
+                places,
+                place_id=place_id,
+                candidate_names=candidate_names,
+                target_place_ids=normalized_target_ids,
+            )
             if seq == 0:
                 debug_sample = {
                     "business_name_used": business_name,
                     "place_id_used": place_id,
+                    "target_place_ids_used": sorted(normalized_target_ids),
                     "alternate_names_used": alternate_names or [],
                     "brand_query": brand_query,
                     "search_radius_m": search_radius_m,
+                    "rank_provider": api_diag.get("rank_provider"),
                     "places_returned": len(places),
                     "debug_point": f"center ({pt['lat']:.4f}, {pt['lng']:.4f})",
                     "top_results": [
@@ -801,6 +936,10 @@ def scan_grid(api_key, keyword, business_name, grid_points,
                 "rank": rank,
                 "competitors": competitors,
             }
+    for idx, result in enumerate(results):
+        if result is None and idx < len(grid_points):
+            results[idx] = _empty_result(grid_points[idx])
+
     if errors:
         if debug_sample is None:
             debug_sample = {}

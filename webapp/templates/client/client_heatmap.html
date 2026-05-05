@@ -1181,6 +1181,7 @@ function showDebug(debugInfo) {
     el.innerHTML =
         '<strong>Debug:</strong> Matching business name: <code>' + (debugInfo.business_name_used || 'none') + '</code>' +
         ' | Place ID: <code>' + (debugInfo.place_id_used || 'none') + '</code>' +
+        ' | Rank provider: <code>' + (debugInfo.rank_provider || 'unknown') + '</code>' +
         ' | Search radius: ' + Math.round(debugInfo.search_radius_m) + 'm' +
         ' | Results returned: ' + debugInfo.places_returned +
         (debugInfo.debug_point ? ' | Sample point: ' + debugInfo.debug_point : '') +

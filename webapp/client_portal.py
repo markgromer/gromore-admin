@@ -5466,7 +5466,8 @@ def _serialize_heatmap_scan(scan, include_results=False):
 
 def _finalize_heatmap_scan(*, keyword, api_key, business_name, grid_points, place_id,
                            search_radius, alternate_names, brand_query, place_verification,
-                           business_lat, business_lng, keyword_warning, keyword_was_cleaned):
+                           business_lat, business_lng, keyword_warning, keyword_was_cleaned,
+                           target_place_ids=None):
     from webapp.heatmap import scan_grid, summarize_competitor_landscape
 
     try:
@@ -5479,6 +5480,7 @@ def _finalize_heatmap_scan(*, keyword, api_key, business_name, grid_points, plac
             search_radius_m=search_radius,
             alternate_names=alternate_names,
             brand_query=brand_query,
+            target_place_ids=target_place_ids,
         )
     except Exception as exc:
         raise RuntimeError(f"Scan failed: {exc}") from exc
@@ -13916,6 +13918,7 @@ def client_heatmap_scan():
         "business_name": business_name,
         "grid_points": grid_points,
         "place_id": place_id,
+        "target_place_ids": [place_id] if place_id else [],
         "search_radius": search_radius,
         "alternate_names": alternate_names,
         "brand_query": keyword_brand_query,
