@@ -510,19 +510,26 @@
                 <div class="connection-panel-shell card mt-3 mb-0" style="box-shadow:none;">
                     <div class="card-body">
                         <h6 class="fw-semibold mb-1">API Key</h6>
-                        <p class="text-muted mb-3" style="font-size:.88rem;">This key powers place search, geocoding, and the map rendering used on the heatmap page.</p>
+                        <p class="text-muted mb-3" style="font-size:.88rem;">Google powers rank-only Places scans, place search, geocoding, and map rendering. Local Falcon is optional for full geo-grid scans using your own token.</p>
                         <form action="{{ url_for('client.client_save_maps_api') }}" method="POST">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                             <div class="row g-3 align-items-end">
-                                <div class="col-lg-8">
+                                <div class="col-lg-6">
                                     <label class="form-label fw-medium" style="font-size:.88rem;">Google Maps API Key</label>
                                     <input type="password" class="form-control" name="google_maps_api_key"
                                            placeholder="{{ 'AIza••••••' ~ brand.google_maps_api_key[-4:] if brand.google_maps_api_key else 'AIza...' }}"
                                            autocomplete="off">
-                                    <small class="text-muted d-block mt-2">Leave blank to keep the current key. If place search fails, check that the key allows server-side Places requests.</small>
+                                    <small class="text-muted d-block mt-2">Leave blank to keep the current key. Google heatmaps use ID-only rank requests.</small>
+                                </div>
+                                <div class="col-lg-6">
+                                    <label class="form-label fw-medium" style="font-size:.88rem;">Local Falcon API Token</label>
+                                    <input type="password" class="form-control" name="local_falcon_api_key"
+                                           placeholder="{{ 'Configured ••••' if brand.local_falcon_api_key else 'Optional' }}"
+                                           autocomplete="off">
+                                    <small class="text-muted d-block mt-2">Leave blank to keep the current token. When configured, heatmaps use Local Falcon for full grid scan data.</small>
                                 </div>
                                 <div class="col-lg-4">
-                                    <button class="btn btn-primary w-100" type="submit">Save Google Maps Key</button>
+                                    <button class="btn btn-primary w-100" type="submit">Save API Keys</button>
                                 </div>
                             </div>
                         </form>
@@ -531,6 +538,11 @@
                             <span class="badge bg-success rounded-pill px-3 py-2"><i class="bi bi-check-circle me-1"></i> Key configured</span>
                             {% else %}
                             <span class="badge bg-secondary rounded-pill px-3 py-2">No key saved yet</span>
+                            {% endif %}
+                            {% if brand.local_falcon_api_key %}
+                            <span class="badge bg-success rounded-pill px-3 py-2"><i class="bi bi-check-circle me-1"></i> Local Falcon token configured</span>
+                            {% else %}
+                            <span class="badge bg-light text-dark border rounded-pill px-3 py-2">Google rank-only mode</span>
                             {% endif %}
                             <button class="btn btn-outline-primary btn-sm" type="button" id="mapsApiTestBtn"><i class="bi bi-tools me-1"></i> Test Google Maps Key</button>
                             <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener" class="btn btn-outline-secondary btn-sm"><i class="bi bi-box-arrow-up-right me-1"></i> Open Google Cloud</a>
@@ -2231,6 +2243,9 @@
                     function icon(ok) { return ok ? '<i class="bi bi-check-circle text-success"></i>' : '<i class="bi bi-x-circle text-danger"></i>'; }
                     var html = '<div class="alert alert-light border mb-0" style="font-size:.82rem;">';
                     html += '<div class="fw-semibold mb-1">Google Maps API check</div>';
+                    if (checks.local_falcon) {
+                        html += icon(checks.local_falcon.ok) + ' Local Falcon: ' + checks.local_falcon.detail + '<br>';
+                    }
                     html += icon(checks.places_new && checks.places_new.ok) + ' Places API (New): ' + ((checks.places_new && checks.places_new.detail) || 'Unknown') + '<br>';
                     html += icon(checks.places_legacy && checks.places_legacy.ok) + ' Places API (Legacy): ' + ((checks.places_legacy && checks.places_legacy.detail) || 'Unknown') + '<br>';
                     html += icon(checks.geocoding && checks.geocoding.ok) + ' Geocoding API: ' + ((checks.geocoding && checks.geocoding.detail) || 'Unknown');

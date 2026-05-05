@@ -1409,18 +1409,24 @@
             <i class="bi bi-geo-alt" style="font-size:1.3rem; color:#ea4335;"></i>
             <h6 class="mb-0">Google Maps API</h6>
         </div>
-        <p class="text-muted mb-3" style="font-size:.88rem;">Required for the Local Rank Heatmap feature. Enable Places API (New), Places API, Geocoding API, and Maps JavaScript API in your Google Cloud project.</p>
+        <p class="text-muted mb-3" style="font-size:.88rem;">Required for the Local Rank Heatmap feature. Google runs cheap rank-only scans; Local Falcon is optional for full geo-grid ranking detail.</p>
         <form action="{{ url_for('client.client_save_maps_api') }}" method="POST">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <div class="row g-3 align-items-end">
-                <div class="col-md-8">
+                <div class="col-md-6">
                     <label class="form-label fw-medium" style="font-size:.88rem;">Google Maps API Key</label>
                     <input type="password" class="form-control" name="google_maps_api_key"
                            placeholder="{{ 'AIza••••••' ~ brand.google_maps_api_key[-4:] if brand.google_maps_api_key else 'AIza...' }}"
                            autocomplete="off">
                 </div>
+                <div class="col-md-6">
+                    <label class="form-label fw-medium" style="font-size:.88rem;">Local Falcon API Token</label>
+                    <input type="password" class="form-control" name="local_falcon_api_key"
+                           placeholder="{{ 'Configured ••••' if brand.local_falcon_api_key else 'Optional' }}"
+                           autocomplete="off">
+                </div>
                 <div class="col-md-4">
-                    <button class="btn btn-primary w-100" type="submit">Save Key</button>
+                    <button class="btn btn-primary w-100" type="submit">Save API Keys</button>
                 </div>
             </div>
             {% if brand.google_maps_api_key %}
@@ -1430,9 +1436,16 @@
                 </span>
             </div>
             {% endif %}
+            {% if brand.local_falcon_api_key %}
+            <div class="mt-2">
+                <span class="badge bg-success rounded-pill px-3 py-2">
+                    <i class="bi bi-check-circle me-1"></i> Local Falcon Token Configured
+                </span>
+            </div>
+            {% endif %}
         </form>
         <div class="mt-3">
-            <small class="text-muted">Get your key at <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener">Google Cloud Console</a>. Enable these 4 APIs: <strong>Places API (New)</strong>, <strong>Places API</strong>, <strong>Geocoding API</strong>, and <strong>Maps JavaScript API</strong>.</small>
+            <small class="text-muted">Get your Google key at <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener">Google Cloud Console</a>. Enable <strong>Places API (New)</strong>, <strong>Places API</strong>, <strong>Geocoding API</strong>, and <strong>Maps JavaScript API</strong>. Leave the Local Falcon token blank to stay in Google rank-only mode.</small>
         </div>
     </div>
 </div>

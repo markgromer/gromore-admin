@@ -10,6 +10,7 @@ from webapp.heatmap import (
     _normalize_browser_maps_result,
     _search_places,
     scan_grid,
+    scan_grid_google_rank_only,
     scan_grid_local_falcon,
     summarize_competitor_landscape,
 )
@@ -136,7 +137,7 @@ class ClientHeatmapTests(unittest.TestCase):
         self.assertEqual(float(refreshed["business_lat"]), 32.0869)
         self.assertEqual(float(refreshed["business_lng"]), -110.8243)
 
-    @patch("webapp.heatmap.scan_grid")
+    @patch("webapp.heatmap.scan_grid_google_rank_only")
     @patch("webapp.heatmap.verify_place_id")
     @patch("webapp.heatmap.calc_search_radius_m")
     @patch("webapp.heatmap.generate_grid")
@@ -243,7 +244,7 @@ class ClientHeatmapTests(unittest.TestCase):
 
         self.assertEqual(saved_scan["status"], "pending")
 
-    @patch("webapp.heatmap.scan_grid")
+    @patch("webapp.heatmap.scan_grid_google_rank_only")
     @patch("webapp.heatmap.verify_place_id")
     @patch("webapp.heatmap.calc_search_radius_m")
     @patch("webapp.heatmap.generate_grid")
@@ -546,6 +547,31 @@ class ClientHeatmapTests(unittest.TestCase):
         self.assertEqual(debug["rank_provider"], "legacy_api")
 
     @patch("webapp.heatmap.requests.post")
+    def test_google_rank_only_scan_matches_by_place_id_and_uses_id_field_mask(self, mock_post):
+        response = Mock(status_code=200, text='{"places":[]}')
+        response.json.return_value = {
+            "places": [
+                {"id": "rival-1"},
+                {"id": "places/place-123"},
+            ]
+        }
+        mock_post.return_value = response
+
+        results, debug = scan_grid_google_rank_only(
+            "maps-key",
+            "plumber",
+            "Heatmap Test Brand",
+            [{"row": 0, "col": 0, "lat": 33.4484, "lng": -112.0740}],
+            place_id="place-123",
+        )
+
+        self.assertEqual(results[0]["rank"], 2)
+        self.assertEqual(results[0]["competitors"], [])
+        self.assertEqual(debug["rank_provider"], "google_rank_only")
+        self.assertEqual(debug["top_results"][1]["id"], "place-123")
+        self.assertEqual(mock_post.call_args.kwargs["headers"]["X-Goog-FieldMask"], "places.id")
+
+    @patch("webapp.heatmap.requests.post")
     def test_local_falcon_scan_normalizes_grid_results(self, mock_post):
         response = Mock(status_code=200)
         response.json.return_value = {
@@ -592,7 +618,7 @@ class ClientHeatmapTests(unittest.TestCase):
         self.assertEqual(debug["api_diagnostics"]["local_falcon"]["solv"], 5)
         self.assertEqual(mock_post.call_args.kwargs["data"]["measurement"], "mi")
 
-    @patch("webapp.heatmap.scan_grid")
+    @patch("webapp.heatmap.scan_grid_google_rank_only")
     @patch("webapp.heatmap.verify_place_id")
     @patch("webapp.heatmap.calc_search_radius_m")
     @patch("webapp.heatmap.generate_grid")

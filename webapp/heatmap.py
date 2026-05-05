@@ -2,8 +2,8 @@
 Local-rank heatmap scanner.
 
 Generates a grid of geographic points around a business location and checks
-live Google Maps results first, with Places API fallbacks, to determine the
-business's ranking for a keyword at each point.
+Google Places rank-only results or Local Falcon scans to determine the
+business's local ranking for a keyword at each point.
 """
 
 import math
@@ -582,6 +582,145 @@ def scan_grid_local_falcon(api_key, keyword, place_id, center_lat, center_lng, g
         },
     }
     return results, debug
+
+
+def scan_grid_google_rank_only(api_key, keyword, business_name, grid_points,
+                               place_id=None, search_radius_m=2000, alternate_names=None,
+                               brand_query=False, target_place_ids=None):
+    """Run a low-cost Google Places ID-only scan and rank by Place ID only."""
+    if not api_key:
+        raise RuntimeError("Google Maps API key is not configured.")
+
+    normalized_target_ids = {
+        _normalize_place_id(value)
+        for value in [place_id, *(target_place_ids or [])]
+        if _normalize_place_id(value)
+    }
+    if not normalized_target_ids:
+        raise RuntimeError("Google rank-only scans require a linked Google Place ID.")
+
+    grid_size = int(math.sqrt(len(grid_points))) if grid_points else 0
+    center_r = grid_size // 2 if grid_size else 0
+    center_idx = center_r * grid_size + center_r if grid_size else 0
+    ordered = []
+    if grid_points:
+        ordered.append((center_idx, grid_points[center_idx]))
+        for idx, pt in enumerate(grid_points):
+            if idx != center_idx:
+                ordered.append((idx, pt))
+
+    results = [None] * len(grid_points)
+    debug_sample = None
+    errors = 0
+    first_error = ""
+    scan_started_at = time.time()
+    url = "https://places.googleapis.com/v1/places:searchText"
+    headers = {
+        "X-Goog-Api-Key": api_key,
+        "X-Goog-FieldMask": "places.id",
+        "Content-Type": "application/json",
+    }
+
+    for seq, (idx, pt) in enumerate(ordered):
+        if time.time() - scan_started_at > SCAN_MAX_SECONDS:
+            raise RuntimeError(f"Heatmap scan exceeded {SCAN_MAX_SECONDS} seconds before completing.")
+        if seq > 0:
+            time.sleep(0.15)
+
+        body = {
+            "textQuery": keyword,
+            "locationBias": {
+                "circle": {
+                    "center": {"latitude": pt["lat"], "longitude": pt["lng"]},
+                    "radius": float(min(search_radius_m or 2000, 50000)),
+                }
+            },
+            "maxResultCount": 20,
+        }
+        api_diag = {
+            "google_rank_only": {
+                "provider": "google_rank_only",
+                "field_mask": "places.id",
+                "lat": pt["lat"],
+                "lng": pt["lng"],
+            },
+            "rank_provider": "google_rank_only",
+        }
+        place_ids = []
+        try:
+            resp = requests.post(url, json=body, headers=headers, timeout=PLACES_REQUEST_TIMEOUT_SECONDS)
+            api_diag["google_rank_only"]["status"] = resp.status_code
+            api_diag["google_rank_only"]["body"] = resp.text[:500]
+            if resp.status_code == 200:
+                raw_places = resp.json().get("places", [])
+                for place in raw_places:
+                    pid = _normalize_place_id(place.get("id") or place.get("name") or "")
+                    if pid:
+                        place_ids.append(pid)
+                api_diag["google_rank_only"]["count"] = len(place_ids)
+            else:
+                errors += 1
+                first_error = first_error or f"HTTP {resp.status_code}: {resp.text[:300]}"
+        except Exception as exc:
+            errors += 1
+            first_error = first_error or str(exc)
+            api_diag["google_rank_only"]["error"] = str(exc)
+            log.warning("Google rank-only heatmap error at point %d (%.4f, %.4f): %s",
+                        idx, pt["lat"], pt["lng"], exc)
+
+        rank = 0
+        for result_rank, pid in enumerate(place_ids, 1):
+            if pid in normalized_target_ids:
+                rank = result_rank
+                break
+
+        if seq == 0:
+            debug_sample = {
+                "business_name_used": business_name,
+                "place_id_used": _normalize_place_id(place_id),
+                "target_place_ids_used": sorted(normalized_target_ids),
+                "alternate_names_used": alternate_names or [],
+                "brand_query": brand_query,
+                "search_radius_m": search_radius_m,
+                "rank_provider": "google_rank_only",
+                "places_returned": len(place_ids),
+                "debug_point": f"center ({pt['lat']:.4f}, {pt['lng']:.4f})",
+                "top_results": [{"name": "", "id": pid} for pid in place_ids[:10]],
+                "api_diagnostics": api_diag,
+            }
+            log.info("Heatmap debug (center) - rank-only place_id=%s | top IDs: %s | api_diag: %s",
+                     place_id, place_ids[:10], api_diag)
+
+        results[idx] = {
+            "row": pt["row"],
+            "col": pt["col"],
+            "lat": pt["lat"],
+            "lng": pt["lng"],
+            "rank": rank,
+            "competitors": [],
+        }
+
+    for idx, result in enumerate(results):
+        if result is None and idx < len(grid_points):
+            pt = grid_points[idx]
+            results[idx] = {
+                "row": pt["row"],
+                "col": pt["col"],
+                "lat": pt["lat"],
+                "lng": pt["lng"],
+                "rank": 0,
+                "competitors": [],
+            }
+
+    if errors == len(grid_points) and grid_points:
+        raise RuntimeError(f"Google rank-only scan failed for every grid point: {first_error or 'unknown error'}")
+
+    if errors:
+        if debug_sample is None:
+            debug_sample = {}
+        debug_sample["api_errors"] = errors
+        debug_sample["total_points"] = len(grid_points)
+    return results, debug_sample
 
 
 def _tokenize(name):

@@ -978,8 +978,8 @@
 
             <h5>What This Connection Does</h5>
             <ul>
-                <li><strong>Local Rank Heatmap:</strong> Scans a grid of points across your service area and checks where your business ranks in Google Maps results for your target keywords. You get a visual heatmap showing green (top 3), yellow (page 1), and red (not ranking) for every point.</li>
-                <li><strong>Competitor Intel:</strong> See which competitors show up at each grid point. Identify which areas they dominate and where you have opportunity.</li>
+                <li><strong>Local Rank Heatmap:</strong> Scans a grid of points across your service area and checks where your linked Google Place ID ranks for your target keywords. You get a visual heatmap showing green (top 3), yellow (page 1), and red (not ranking) for every point.</li>
+                <li><strong>Competitor Intel:</strong> See competitor detail when Local Falcon is configured. Google rank-only mode keeps API usage low and reports your rank without full competitor names.</li>
                 <li><strong>GMB Monitoring:</strong> Track your Google Business Profile visibility over time. Spot ranking drops before they cost you leads.</li>
             </ul>
 
@@ -990,7 +990,7 @@
                 <li>Go to "APIs & Services" > "Library" in the left sidebar</li>
                 <li>Search for and enable these APIs:
                     <ul>
-                        <li><strong>Places API (New)</strong> - required for current place search and business lookup requests</li>
+                        <li><strong>Places API (New)</strong> - required for rank-only heatmap scans, current place search, and business lookup requests</li>
                         <li><strong>Places API</strong> - required as the compatibility fallback for place lookups</li>
                         <li><strong>Geocoding API</strong> - required to turn searched addresses, cities, and scan centers into map coordinates</li>
                         <li><strong>Maps JavaScript API</strong> - required for rendering the heatmap and interactive map views</li>
@@ -1005,10 +1005,10 @@
             <ol>
                 <li>In the Cloud Console, go to "Billing" in the left sidebar</li>
                 <li>Link a billing account to your project</li>
-                <li>Google gives you <strong>$200/month in free Maps API usage</strong> - this covers thousands of heatmap scans. Most users never exceed the free tier.</li>
+                <li>Google gives you <strong>$200/month in free Maps API usage</strong>. Rank-only scans request Place IDs only to keep usage low.</li>
             </ol>
             <div class="tip-box">
-                <i class="bi bi-lightbulb me-1"></i> <strong>Cost note:</strong> A single heatmap scan with a 7x7 grid uses about 50 Places API calls, costing roughly $0.80. With Google's $200 free monthly credit, you can run around 250 scans per month at zero cost.
+                <i class="bi bi-lightbulb me-1"></i> <strong>Cost note:</strong> A 7x7 Google heatmap uses 49 rank-only Places requests. Add a Local Falcon token on Connections only when you want Local Falcon's full geo-grid result data.
             </div>
 
             <h5>Linking Your Google Business Profile</h5>

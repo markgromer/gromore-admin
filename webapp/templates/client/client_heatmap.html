@@ -256,7 +256,7 @@
 
 <div class="hm-header">
     <h3><i class="bi bi-geo-alt me-2"></i>Local Rank Heatmap</h3>
-    <p>Drag the scan center, set your grid, and run a map-first Google Maps local-pack scan across your service area. This does not track organic website page-one rankings.</p>
+    <p>Drag the scan center, set your grid, and run a Place ID rank-only scan across your service area. Add a Local Falcon token for full geo-grid ranking detail.</p>
 </div>
 
 {% set has_location = brand.business_lat and brand.business_lng and brand.business_lat != 0 %}
@@ -266,7 +266,7 @@
 <div class="setup-card text-center">
     <i class="bi bi-key" style="font-size: 2.5rem; color: #6366f1;"></i>
     <h5 class="mt-3">Google Maps API Key Required</h5>
-    <p class="text-muted mb-3">The heatmap uses Google's Places API to estimate your Google Maps local-pack rank at each grid point.<br>
+    <p class="text-muted mb-3">The heatmap uses Google's Places API in rank-only mode to estimate your Google Maps local-pack rank at each grid point.<br>
     Add your key in Connections to get started.</p>
     <a href="{{ url_for('client.client_settings') }}" class="btn btn-primary">
         <i class="bi bi-plug me-1"></i> Go to Connections
@@ -422,7 +422,7 @@
                 <div class="scan-control-card h-100">
                     <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
                         <div>
-                            <div class="fw-semibold">Map-first scan</div>
+                            <div class="fw-semibold">Rank-only scan</div>
                             <div class="map-meta">The draggable center pin changes this scan only. Your business marker stays fixed so you can scan away from the listing when needed.</div>
                         </div>
                         <button class="btn btn-sm btn-outline-secondary" type="button" id="resetCenterBtn">Use business location</button>
@@ -634,7 +634,8 @@
                 <ul class="mb-0" style="font-size: .85rem; color: #4b5563; padding-left: 1.2rem;">
                     <li>Set the keyword, radius, and odd grid size you want to test</li>
                     <li>Drag the scan center pin or click the map to move the grid</li>
-                    <li>We check live Google Maps results around every grid point, then fall back to Places APIs if the browser result set comes back empty or errors</li>
+                    <li>Google mode checks rank-only Places results around every grid point and matches your linked Place ID</li>
+                    <li>When a Local Falcon token is saved, scans use Local Falcon for full geo-grid ranking detail</li>
                     <li>Green means top 3 in the local pack, yellow means top 10 in the local pack, red means lower local-pack visibility, and gray means the scan did not return you</li>
                     <li>The highlighted cell is the grid point closest to the live scan center</li>
                     <li>Service-area businesses can rank on page one organically while still being inconsistent in Google Maps and local-pack results</li>
@@ -1135,7 +1136,7 @@ function renderCompetitorInsights() {
                 '</div>';
         }).join('');
     } else {
-        selectedCompetitors.innerHTML = '<div class="text-muted" style="font-size:.88rem;">No Google competitors were returned for this point.</div>';
+        selectedCompetitors.innerHTML = '<div class="text-muted" style="font-size:.88rem;">Google rank-only mode does not return competitor names for this point.</div>';
     }
 
     if (currentCompetitorSummary && currentCompetitorSummary.length) {
@@ -1185,10 +1186,11 @@ function showDebug(debugInfo) {
         ' | Search radius: ' + Math.round(debugInfo.search_radius_m) + 'm' +
         ' | Results returned: ' + debugInfo.places_returned +
         (debugInfo.debug_point ? ' | Sample point: ' + debugInfo.debug_point : '') +
-        '<br><strong>Ranked results (center grid point - Google Maps browser-first, Places fallback):</strong> ' +
+        '<br><strong>Ranked Place IDs (center grid point - Google rank-only scan):</strong> ' +
         (debugInfo.top_results && debugInfo.top_results.length ? debugInfo.top_results.map(function(result, index) {
             var match = debugInfo.place_id_used && result.id === debugInfo.place_id_used ? ' <span style="color:#22c55e; font-weight:600;">MATCH</span>' : '';
-            return '<br>' + (index + 1) + '. ' + result.name + ' <small style="color:#9ca3af;">(' + result.id.substring(0, 20) + '...)</small>' + match;
+            var label = result.name || 'Place ID only';
+            return '<br>' + (index + 1) + '. ' + label + ' <small style="color:#9ca3af;">(' + result.id.substring(0, 20) + '...)</small>' + match;
         }).join('') : '<em>none returned</em>');
 
     if (debugInfo.api_diagnostics) {
@@ -1211,9 +1213,10 @@ function showDebug(debugInfo) {
             return row;
         }
 
-        diagnosticsHtml += apiRow('Google Maps browser', diagnostics.browser_maps);
+        diagnosticsHtml += apiRow('Google rank-only Places', diagnostics.google_rank_only);
+        if (diagnostics.local_falcon) diagnosticsHtml += apiRow('Local Falcon', diagnostics.local_falcon);
         if (diagnostics.new_api || diagnostics.legacy_api || diagnostics.nearby_api || diagnostics.find_place) {
-            diagnosticsHtml += '<br><span style="color:#64748b; font-weight:600;">Fallback Places APIs:</span>';
+            diagnosticsHtml += '<br><span style="color:#64748b; font-weight:600;">Compatibility Places APIs:</span>';
         }
         diagnosticsHtml += apiRow('Places API (New)', diagnostics.new_api);
         diagnosticsHtml += apiRow('Places Text Search (Legacy)', diagnostics.legacy_api);
@@ -1268,7 +1271,7 @@ function showDebug(debugInfo) {
     }
 
     if (debugInfo.places_returned === 0) {
-        el.innerHTML += '<br><span style="color:#f59e0b; font-weight:600;">No ranked results were returned at the sample point from live Google Maps or the fallback APIs. Click "Test API Key" if this looks wrong.</span>';
+        el.innerHTML += '<br><span style="color:#f59e0b; font-weight:600;">No ranked Place IDs were returned at the sample point. Click "Test API Key" if this looks wrong.</span>';
     }
 
     if (debugInfo.places_returned > 0 && debugInfo.place_id_used && debugInfo.place_id_verification && !debugInfo.place_id_verification.error) {
@@ -1284,7 +1287,7 @@ function showDebug(debugInfo) {
         if (!foundMatch) {
             el.innerHTML += '<br><div style="background:#eff6ff; border:1px solid #3b82f6; border-radius:8px; padding:10px; margin-top:8px; color:#1e40af;">' +
                 '<strong>Why "Not found"?</strong> Your business exists in Google, but this scan did not return it for this keyword at this location. ' +
-                'This heatmap measures Google Maps local-pack visibility from live browser results, with Places used only as fallback coverage. It does not measure your website\'s organic page-one ranking. Service-area businesses often show up in standard Google results more often than they appear in map results.' +
+                'This heatmap measures Google Maps local-pack visibility from rank-only Place ID results. It does not measure your website\'s organic page-one ranking. Service-area businesses often show up in standard Google results more often than they appear in map results.' +
                 '<br><strong>What this means:</strong> This keyword and location combo is weak in the local pack feed. Try a few different service phrases to see where your Google Business Profile does appear.' +
                 '</div>';
         }
@@ -1783,9 +1786,6 @@ document.addEventListener('DOMContentLoaded', function() {
                     var html = '';
                     if (checks.local_falcon) {
                         html += icon(checks.local_falcon.ok) + ' Local Falcon: ' + checks.local_falcon.detail + '<br>';
-                    }
-                    if (checks.browser_runtime) {
-                        html += icon(checks.browser_runtime.ok) + ' Browser scanner: ' + checks.browser_runtime.detail + '<br>';
                     }
                     html += icon(checks.places_new.ok) + ' Places API (New): ' + checks.places_new.detail + '<br>';
                     html += icon(checks.places_legacy.ok) + ' Places API (Legacy): ' + checks.places_legacy.detail + '<br>';

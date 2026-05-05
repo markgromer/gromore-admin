@@ -132,7 +132,6 @@ function summarizeApiChecks(checks) {
   if (!checks) return null
   return [
     `Local Falcon: ${checks.local_falcon?.detail || 'Unknown'}`,
-    `Browser scanner: ${checks.browser_runtime?.detail || 'Unknown'}`,
     `Places API (New): ${checks.places_new?.detail || 'Unknown'}`,
     `Places API (Legacy): ${checks.places_legacy?.detail || 'Unknown'}`,
     `Geocoding API: ${checks.geocoding?.detail || 'Unknown'}`,
@@ -192,7 +191,7 @@ export default function Heatmap() {
     ? distanceMiles(brand.business_lat, brand.business_lng, center.lat, center.lng)
     : 0
   const gridPointCount = gridSize * gridSize
-  const browserLookupEstimate = gridPointCount
+  const googleLookupEstimate = gridPointCount
   const centerCellIndex = center ? closestCellIndex(results, center.lat, center.lng) : -1
   const selectedCell = selectedCellIndex >= 0 ? results[selectedCellIndex] : null
 
@@ -784,7 +783,7 @@ export default function Heatmap() {
 
               <div className={styles.metaRow}>
                 <span className={styles.metaPill}>Grid points: {gridPointCount}</span>
-                <span className={styles.metaPill}>Estimated Google Maps lookups: {browserLookupEstimate}</span>
+                <span className={styles.metaPill}>Estimated rank-only Google lookups: {googleLookupEstimate}</span>
                 <span className={`${styles.metaPill} ${scanDirty ? styles.metaPillWarning : ''}`}>
                   {scanDirty ? 'Scan settings changed - rerun to refresh results' : 'Results match the current center'}
                 </span>
@@ -899,7 +898,7 @@ export default function Heatmap() {
                       <span><i className={`${styles.legendDot} ${styles.legendNone}`} /> Not returned in scan results</span>
                       <span><i className={`${styles.legendDot} ${styles.legendCenter}`} /> Closest cell to center</span>
                     </div>
-                    <p className={styles.inlineMessage}>This heatmap measures Google Maps visibility from live browser results, with Places used only as a fallback when needed. Service-area businesses can rank on page one organically while still appearing inconsistently in map results.</p>
+                    <p className={styles.inlineMessage}>Google mode is rank-only and matches by Place ID from Places API results. Local Falcon mode adds full grid scan detail when a token is configured.</p>
                   </>
                 ) : (
                   <div className={styles.emptyState}>No scan yet. Set the term, move the center, and run the heatmap.</div>
@@ -930,7 +929,7 @@ export default function Heatmap() {
                             </div>
                             {competitor.is_target && <span className={styles.targetBadge}>You</span>}
                           </div>
-                        )) : <div className={styles.emptyState}>No Google competitors were returned for this point.</div>}
+                        )) : <div className={styles.emptyState}>Google rank-only mode does not return competitor names for this point.</div>}
                       </div>
                     </>
                   ) : (
@@ -968,7 +967,7 @@ export default function Heatmap() {
 
             {(debugInfo || apiTestLines.length > 0) && (
               <Card>
-                <CardHeader title="Diagnostics" subtitle="Use this when live Google Maps results look thin or the fallback Places checks are carrying too much of the scan." />
+                <CardHeader title="Diagnostics" subtitle="Use this when rank-only Google results look thin or Local Falcon is expected to be the provider." />
                 {apiTestLines.length > 0 && (
                   <div className={styles.debugBlock}>
                     <div className={styles.debugLabel}>API test</div>
@@ -985,7 +984,7 @@ export default function Heatmap() {
                     {(debugInfo.place_id_verification?.address || '').toLowerCase().includes('service-area business') && (
                       <p>This linked listing is a service-area business. It may rank in standard Google results while still appearing inconsistently in Google Maps and local-pack results.</p>
                     )}
-                    {brand?.local_falcon_configured && <p>Local Falcon is configured for ranking scans.</p>}
+                    {brand?.local_falcon_configured ? <p>Local Falcon is configured for full grid ranking scans.</p> : <p>Google rank-only mode is active.</p>}
                     {debugInfo.keyword_warning && <p>{debugInfo.keyword_warning}</p>}
                   </div>
                 )}

@@ -5469,7 +5469,7 @@ def _finalize_heatmap_scan(*, keyword, api_key, business_name, grid_points, plac
                            business_lat, business_lng, keyword_warning, keyword_was_cleaned,
                            target_place_ids=None, local_falcon_api_key="", grid_size=None,
                            radius_miles=None, center_lat=None, center_lng=None):
-    from webapp.heatmap import scan_grid, scan_grid_local_falcon, summarize_competitor_landscape
+    from webapp.heatmap import scan_grid_google_rank_only, scan_grid_local_falcon, summarize_competitor_landscape
 
     try:
         if local_falcon_api_key:
@@ -5485,7 +5485,7 @@ def _finalize_heatmap_scan(*, keyword, api_key, business_name, grid_points, plac
                 candidate_names=[business_name, *(alternate_names or [])],
             )
         else:
-            results, debug_info = scan_grid(
+            results, debug_info = scan_grid_google_rank_only(
                 api_key,
                 keyword,
                 business_name,
@@ -13046,9 +13046,18 @@ def client_save_maps_api():
     db = _get_db()
     brand_id = session["client_brand_id"]
     api_key = (request.form.get("google_maps_api_key") or "").strip()[:200]
+    local_falcon_api_key = (request.form.get("local_falcon_api_key") or "").strip()[:200]
+    saved = []
     if api_key:
         db.update_brand_text_field(brand_id, "google_maps_api_key", api_key)
-    flash("Google Maps API key saved.", "success")
+        saved.append("Google Maps API key")
+    if local_falcon_api_key:
+        db.update_brand_text_field(brand_id, "local_falcon_api_key", local_falcon_api_key)
+        saved.append("Local Falcon API token")
+    if saved:
+        flash(f"{' and '.join(saved)} saved.", "success")
+    else:
+        flash("No API keys changed.", "info")
     return redirect(url_for("client.client_settings"))
 
 
@@ -13898,11 +13907,13 @@ def client_heatmap_scan():
     if not (-90 <= scan_center_lat <= 90) or not (-180 <= scan_center_lng <= 180):
         return jsonify(ok=False, error="Scan center coordinates are out of range."), 400
 
-    from webapp.heatmap import generate_grid, scan_grid, calc_search_radius_m, verify_place_id, clean_keyword
+    from webapp.heatmap import generate_grid, calc_search_radius_m, verify_place_id, clean_keyword
     grid_points = generate_grid(scan_center_lat, scan_center_lng, radius, grid_size)
     search_radius = calc_search_radius_m(radius, grid_size)
     business_name = brand.get("display_name", "")
     place_id = brand.get("google_place_id") or None
+    if not place_id:
+        return jsonify(ok=False, error="Google Place ID is required for rank-only heatmap scans. Link the correct listing first."), 400
 
     # Strip "near me" / "nearby" etc - the API already gets lat/lng + radius
     keyword, keyword_was_cleaned = clean_keyword(keyword)
@@ -14091,29 +14102,8 @@ def client_heatmap_test_api():
     else:
         checks["local_falcon"] = {
             "ok": False,
-            "detail": "Not configured. Set LOCAL_FALCON_API_KEY to use real Local Falcon grid scans.",
+            "detail": "Not configured. Add a Local Falcon token in Connections to use full geo-grid scans.",
         }
-
-    # Test 4: Server browser runtime used by the actual heatmap scanner
-    try:
-        import os as _os
-        from playwright.sync_api import sync_playwright as _sync_playwright
-
-        with _sync_playwright() as playwright:
-            browser = playwright.chromium.launch(headless=True)
-            page = browser.new_page()
-            page.goto("data:text/html,<title>heatmap-browser-ok</title>", timeout=10000)
-            title = page.title()
-            browser.close()
-        if title == "heatmap-browser-ok":
-            checks["browser_runtime"] = {
-                "ok": True,
-                "detail": f"Working ({_os.environ.get('PLAYWRIGHT_BROWSERS_PATH') or 'default path'})",
-            }
-        else:
-            checks["browser_runtime"] = {"ok": False, "detail": "Browser launched but page check failed."}
-    except Exception as exc:
-        checks["browser_runtime"] = {"ok": False, "detail": str(exc)[:500]}
 
     all_ok = all(c["ok"] for key, c in checks.items() if key != "local_falcon")
     any_places = checks.get("places_new", {}).get("ok") or checks.get("places_legacy", {}).get("ok")
