@@ -1384,14 +1384,14 @@ function waitForScanCompletion(scanId) {
                         reject(new Error(scan.error_message || 'Heatmap scan failed.'));
                         return;
                     }
-                    if (attempts >= 90) {
+                    if (attempts >= 150) {
                         reject(new Error('Heatmap scan is still running. Refresh in a moment.'));
                         return;
                     }
                     window.setTimeout(poll, 2000);
                 })
                 .catch(function() {
-                    if (attempts >= 90) {
+                    if (attempts >= 150) {
                         reject(new Error('Network error while waiting for scan.'));
                         return;
                     }

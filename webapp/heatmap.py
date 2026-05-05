@@ -17,6 +17,13 @@ log = logging.getLogger(__name__)
 
 MILES_TO_KM = 1.60934
 KM_PER_DEG_LAT = 111.32
+BROWSER_GOTO_TIMEOUT_MS = 12000
+BROWSER_NETWORK_IDLE_TIMEOUT_MS = 2500
+BROWSER_RESULTS_TIMEOUT_MS = 5000
+BROWSER_SCROLL_PAUSE_MS = 350
+BROWSER_SCROLL_PASSES = 2
+PLACES_REQUEST_TIMEOUT_SECONDS = 8
+SCAN_MAX_SECONDS = 240
 
 # Phrases that are redundant when we already pass lat/lng + radius to the API
 _LOCATION_NOISE = re.compile(
@@ -159,7 +166,7 @@ def _find_place_candidates(api_key, query, lat=None, lng=None, use_bias=True):
     resp = requests.get(
         "https://maps.googleapis.com/maps/api/place/findplacefromtext/json",
         params=params,
-        timeout=15,
+        timeout=PLACES_REQUEST_TIMEOUT_SECONDS,
     )
     data = resp.json()
     candidates = []
@@ -253,14 +260,14 @@ def _search_google_maps_page(page, keyword, lat, lng, radius_m=2000, max_results
     url = f"https://www.google.com/maps/search/{quote(keyword, safe='')}/@{lat:.6f},{lng:.6f},{zoom}z?hl=en"
     diag = {"browser_maps": {"provider": "browser_maps", "url": url, "zoom": zoom}}
 
-    page.goto(url, wait_until="domcontentloaded", timeout=60000)
+    page.goto(url, wait_until="domcontentloaded", timeout=BROWSER_GOTO_TIMEOUT_MS)
     try:
-        page.wait_for_load_state("networkidle", timeout=12000)
+        page.wait_for_load_state("networkidle", timeout=BROWSER_NETWORK_IDLE_TIMEOUT_MS)
     except Exception:
         pass
 
     try:
-        page.locator('[role="article"]').first.wait_for(timeout=12000)
+        page.locator('[role="article"]').first.wait_for(timeout=BROWSER_RESULTS_TIMEOUT_MS)
     except Exception:
         diag["browser_maps"]["title"] = page.title()
         diag["browser_maps"]["count"] = 0
@@ -268,7 +275,7 @@ def _search_google_maps_page(page, keyword, lat, lng, radius_m=2000, max_results
 
     feed = page.locator('[role="feed"]')
     last_count = 0
-    for _ in range(4):
+    for _ in range(BROWSER_SCROLL_PASSES):
         current_count = page.locator('[role="article"]').count()
         if current_count >= max_results or current_count == last_count:
             break
@@ -278,7 +285,7 @@ def _search_google_maps_page(page, keyword, lat, lng, radius_m=2000, max_results
                 feed.evaluate('(node) => { node.scrollTop = node.scrollHeight; }')
             except Exception:
                 pass
-        page.wait_for_timeout(700)
+        page.wait_for_timeout(BROWSER_SCROLL_PAUSE_MS)
 
     raw_results = page.evaluate(
         r"""
@@ -343,7 +350,7 @@ def _search_places(api_key, keyword, lat, lng, radius_m=2000, brand_query=False,
         "maxResultCount": 20,
     }
     try:
-        resp = requests.post(url_new, json=body, headers=headers, timeout=15)
+        resp = requests.post(url_new, json=body, headers=headers, timeout=PLACES_REQUEST_TIMEOUT_SECONDS)
         resp_body = resp.text[:500]
         diag["new_api"] = {"status": resp.status_code, "body": resp_body}
         if resp.status_code == 200:
@@ -366,7 +373,7 @@ def _search_places(api_key, keyword, lat, lng, radius_m=2000, brand_query=False,
         "key": api_key,
     }
     try:
-        resp = requests.get(url_legacy, params=params, timeout=15)
+        resp = requests.get(url_legacy, params=params, timeout=PLACES_REQUEST_TIMEOUT_SECONDS)
         resp.raise_for_status()
         data = resp.json()
         diag["legacy_api"] = {"status": resp.status_code, "gstatus": data.get("status"),
@@ -394,7 +401,7 @@ def _search_places(api_key, keyword, lat, lng, radius_m=2000, brand_query=False,
         "key": api_key,
     }
     try:
-        resp = requests.get(url_nearby, params=params_nearby, timeout=15)
+        resp = requests.get(url_nearby, params=params_nearby, timeout=PLACES_REQUEST_TIMEOUT_SECONDS)
         resp.raise_for_status()
         data = resp.json()
         diag["nearby_api"] = {"status": resp.status_code, "gstatus": data.get("status"),
@@ -700,6 +707,7 @@ def scan_grid(api_key, keyword, business_name, grid_points,
     results = [None] * len(grid_points)
     debug_sample = None
     errors = 0
+    scan_started_at = time.time()
     candidate_names = [business_name, *(alternate_names or [])]
     normalized_target_ids = {
         _normalize_place_id(value)
@@ -778,7 +786,10 @@ def scan_grid(api_key, keyword, business_name, grid_points,
         import importlib
         sync_playwright = importlib.import_module("playwright.sync_api").sync_playwright
         with sync_playwright() as playwright:
-            browser = playwright.chromium.launch(headless=True)
+            browser = playwright.chromium.launch(
+                headless=True,
+                args=["--no-sandbox", "--disable-dev-shm-usage"],
+            )
             center_point = ordered[0][1] if ordered else {"lat": 0, "lng": 0}
             context = browser.new_context(
                 viewport={"width": 1440, "height": 1200},
@@ -789,6 +800,8 @@ def scan_grid(api_key, keyword, business_name, grid_points,
             page = context.new_page()
 
             for seq, (idx, pt) in enumerate(ordered):
+                if time.time() - scan_started_at > SCAN_MAX_SECONDS:
+                    raise RuntimeError(f"Heatmap scan exceeded {SCAN_MAX_SECONDS} seconds before completing.")
                 if seq > 0:
                     time.sleep(0.35)
                 try:
@@ -875,6 +888,8 @@ def scan_grid(api_key, keyword, business_name, grid_points,
 
     if browser is None and ordered:
         for seq, (idx, pt) in enumerate(ordered):
+            if time.time() - scan_started_at > SCAN_MAX_SECONDS:
+                raise RuntimeError(f"Heatmap scan exceeded {SCAN_MAX_SECONDS} seconds before completing.")
             if seq > 0:
                 time.sleep(0.35)
             try:

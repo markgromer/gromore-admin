@@ -210,7 +210,7 @@ export default function Heatmap() {
   }
 
   const waitForScanCompletion = async (scanId) => {
-    for (let attempt = 0; attempt < 90; attempt += 1) {
+    for (let attempt = 0; attempt < 150; attempt += 1) {
       const data = await api.get(`/heatmap/scan/${scanId}`)
       if (!data.ok) throw new Error(data.error || 'Failed to load scan.')
       const scan = data.scan
