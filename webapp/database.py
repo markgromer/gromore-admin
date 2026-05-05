@@ -1203,6 +1203,13 @@ class WebDB:
                 theme_id INTEGER DEFAULT 0,
                 template_ids_json TEXT DEFAULT '[]',
                 prompt_notes TEXT DEFAULT '',
+                source_url TEXT DEFAULT '',
+                source_wp_page_id INTEGER DEFAULT 0,
+                wp_template_slug TEXT DEFAULT '',
+                acf_enabled INTEGER DEFAULT 0,
+                acf_field_map_json TEXT DEFAULT '{}',
+                verticals TEXT DEFAULT '',
+                capture_notes TEXT DEFAULT '',
                 sort_order INTEGER DEFAULT 0,
                 is_default INTEGER DEFAULT 0,
                 is_active INTEGER DEFAULT 1,
@@ -2535,6 +2542,21 @@ class WebDB:
         conn.commit()
 
         # ── feedback_ai_drafts migrations ──
+        sb_site_template_columns = {r[1] for r in conn.execute("PRAGMA table_info(sb_site_templates)").fetchall()}
+        new_sb_site_template_cols = [
+            ("source_url", "TEXT DEFAULT ''"),
+            ("source_wp_page_id", "INTEGER DEFAULT 0"),
+            ("wp_template_slug", "TEXT DEFAULT ''"),
+            ("acf_enabled", "INTEGER DEFAULT 0"),
+            ("acf_field_map_json", "TEXT DEFAULT '{}'"),
+            ("verticals", "TEXT DEFAULT ''"),
+            ("capture_notes", "TEXT DEFAULT ''"),
+        ]
+        for col_name, col_def in new_sb_site_template_cols:
+            if col_name not in sb_site_template_columns:
+                self._safe_add_column(conn, "sb_site_templates", col_name, col_def)
+        conn.commit()
+
         faid_columns = {r[1] for r in conn.execute("PRAGMA table_info(feedback_ai_drafts)").fetchall()}
         new_faid_cols = [
             ("run_id", "INTEGER DEFAULT NULL"),
@@ -7334,6 +7356,13 @@ class WebDB:
             int(data.get("theme_id") or 0),
             json.dumps(list(data.get("template_ids") or [])),
             data.get("prompt_notes", ""),
+            data.get("source_url", ""),
+            int(data.get("source_wp_page_id") or 0),
+            data.get("wp_template_slug", ""),
+            int(data.get("acf_enabled") or 0),
+            data.get("acf_field_map_json", "{}") or "{}",
+            data.get("verticals", ""),
+            data.get("capture_notes", ""),
             data.get("sort_order", 0),
             data.get("is_default", 0),
             data.get("is_active", 1),
@@ -7341,15 +7370,17 @@ class WebDB:
         if row:
             conn.execute(
                 "UPDATE sb_site_templates SET name = ?, slug = ?, description = ?, preview_image = ?, theme_id = ?, "
-                "template_ids_json = ?, prompt_notes = ?, sort_order = ?, is_default = ?, is_active = ?, "
+                "template_ids_json = ?, prompt_notes = ?, source_url = ?, source_wp_page_id = ?, wp_template_slug = ?, "
+                "acf_enabled = ?, acf_field_map_json = ?, verticals = ?, capture_notes = ?, sort_order = ?, is_default = ?, is_active = ?, "
                 "updated_at = datetime('now') WHERE id = ?",
                 params + (row["id"],),
             )
             return row["id"], False
 
         cur = conn.execute(
-            "INSERT INTO sb_site_templates (name, slug, description, preview_image, theme_id, template_ids_json, prompt_notes, sort_order, is_default, is_active) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO sb_site_templates (name, slug, description, preview_image, theme_id, template_ids_json, prompt_notes, "
+            "source_url, source_wp_page_id, wp_template_slug, acf_enabled, acf_field_map_json, verticals, capture_notes, sort_order, is_default, is_active) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             params,
         )
         return cur.lastrowid, True
@@ -7407,6 +7438,11 @@ class WebDB:
         item = dict(item or {})
         item["template_ids"] = self._safe_json_list(item.get("template_ids_json"))
         item["template_count"] = len(item["template_ids"])
+        try:
+            acf_map = json.loads(item.get("acf_field_map_json") or "{}")
+        except (json.JSONDecodeError, TypeError):
+            acf_map = {}
+        item["acf_field_map"] = acf_map if isinstance(acf_map, dict) else {}
         theme_id = int(item.get("theme_id") or 0)
         item["theme"] = self.get_sb_theme(theme_id) if theme_id else None
         item["theme_name"] = (item.get("theme") or {}).get("name") or ""
@@ -7418,8 +7454,9 @@ class WebDB:
             conn.execute("UPDATE sb_site_templates SET is_default = 0")
         cur = conn.execute(
             "INSERT INTO sb_site_templates (name, slug, description, preview_image, theme_id, "
-            "template_ids_json, prompt_notes, sort_order, is_default, is_active) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "template_ids_json, prompt_notes, source_url, source_wp_page_id, wp_template_slug, "
+            "acf_enabled, acf_field_map_json, verticals, capture_notes, sort_order, is_default, is_active) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 data.get("name", ""),
                 data.get("slug", ""),
@@ -7428,6 +7465,13 @@ class WebDB:
                 int(data.get("theme_id") or 0),
                 json.dumps(list(data.get("template_ids") or [])),
                 data.get("prompt_notes", ""),
+                data.get("source_url", ""),
+                int(data.get("source_wp_page_id") or 0),
+                data.get("wp_template_slug", ""),
+                int(data.get("acf_enabled") or 0),
+                data.get("acf_field_map_json", "{}") or "{}",
+                data.get("verticals", ""),
+                data.get("capture_notes", ""),
                 data.get("sort_order", 0),
                 data.get("is_default", 0),
                 data.get("is_active", 1),
@@ -7468,11 +7512,13 @@ class WebDB:
         params = []
         for key in (
             "name", "slug", "description", "preview_image", "theme_id",
-            "prompt_notes", "sort_order", "is_default", "is_active",
+            "prompt_notes", "source_url", "source_wp_page_id", "wp_template_slug",
+            "acf_enabled", "acf_field_map_json", "verticals", "capture_notes",
+            "sort_order", "is_default", "is_active",
         ):
             if key in data:
                 value = data[key]
-                if key == "theme_id":
+                if key in {"theme_id", "source_wp_page_id", "acf_enabled"}:
                     value = int(value or 0)
                 fields.append(f"{key} = ?")
                 params.append(value)

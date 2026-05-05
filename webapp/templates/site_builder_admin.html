@@ -14,6 +14,8 @@
     .img-thumb:hover, .img-thumb.selected { border-color: #2563eb; }
     .img-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: .75rem; }
     .prompt-editor textarea { font-family: 'Courier New', monospace; font-size: .85rem; }
+    .acf-map-editor { font-family: 'Courier New', monospace; font-size: .78rem; min-height: 220px; }
+    .capture-card { border: 1px dashed #93c5fd; background: #f8fbff; border-radius: 10px; padding: 1rem; }
     .badge-active { background: #10b981; }
     .badge-inactive { background: #9ca3af; }
     .cat-pill { display: inline-block; padding: .25rem .75rem; border-radius: 20px; font-size: .8rem; background: #f3f4f6; color: #374151; margin: .15rem; cursor: pointer; }
@@ -277,6 +279,14 @@
                             <span class="badge bg-secondary">{{ st.slug }}</span>
                             {% if st.theme_name %}<span class="text-muted ms-1">Theme: {{ st.theme_name }}</span>{% endif %}
                         </div>
+                        <div class="text-muted small mb-1">
+                            {% if st.acf_enabled %}<span class="badge bg-info text-dark">ACF mapped</span>{% endif %}
+                            {% if st.wp_template_slug %}<span class="badge bg-light text-dark border">WP template: {{ st.wp_template_slug }}</span>{% endif %}
+                            {% if st.verticals %}<span class="badge bg-light text-dark border">{{ st.verticals }}</span>{% endif %}
+                        </div>
+                        {% if st.source_url %}
+                        <div class="small mb-1"><a href="{{ st.source_url }}" target="_blank" rel="noopener"><i class="bi bi-box-arrow-up-right"></i> Source style</a></div>
+                        {% endif %}
                         <div class="text-muted small mb-1">{{ st.template_count }} template{{ '' if st.template_count == 1 else 's' }} linked</div>
                         {% if st.description %}
                         <p class="text-muted small mb-0">{{ st.description[:120] }}{% if st.description|length > 120 %}...{% endif %}</p>
@@ -291,6 +301,51 @@
         </div>
     </div>
     <div class="col-lg-4">
+        <div class="sb-card">
+            <h6><i class="bi bi-wordpress"></i> Capture WordPress Style</h6>
+            <p class="text-muted small">When you like a WordPress draft, save it here as a reusable kit. WARREN will keep the approved template slug and fill mapped ACF fields with fresh SEO content for each brand.</p>
+            <form method="POST" action="{{ url_for('sb_admin_site_template_capture_wordpress') }}" class="row g-2">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="col-12">
+                    <label class="form-label small fw-semibold">Template Name</label>
+                    <input type="text" name="name" class="form-control form-control-sm" placeholder="Premium Local Service Home" required>
+                </div>
+                <div class="col-12">
+                    <label class="form-label small fw-semibold">Approved WordPress URL</label>
+                    <input type="url" name="source_url" class="form-control form-control-sm" placeholder="https://example.com/sample-home" required>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label small fw-semibold">WP Page ID</label>
+                    <input type="number" name="source_wp_page_id" class="form-control form-control-sm" value="0">
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label small fw-semibold">Template Slug</label>
+                    <input type="text" name="wp_template_slug" class="form-control form-control-sm" placeholder="templates/warren-home.php">
+                </div>
+                <div class="col-12">
+                    <label class="form-label small fw-semibold">Best Verticals</label>
+                    <input type="text" name="verticals" class="form-control form-control-sm" placeholder="home services, pet care, med spa">
+                </div>
+                <div class="col-12">
+                    <label class="form-label small fw-semibold">Theme</label>
+                    <select name="theme_id" class="form-select form-select-sm">
+                        <option value="0">No linked theme</option>
+                        {% for theme in themes %}
+                        <option value="{{ theme.id }}">{{ theme.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-12">
+                    <label class="form-label small fw-semibold">Capture Notes</label>
+                    <textarea name="capture_notes" class="form-control form-control-sm" rows="3" placeholder="What must stay consistent: hero layout, trust strip, CTA placement, field groups, etc."></textarea>
+                </div>
+                <div class="col-12">
+                    <button class="btn btn-success btn-sm w-100" type="submit">
+                        <i class="bi bi-bookmark-plus"></i> Save Reusable WP Template
+                    </button>
+                </div>
+            </form>
+        </div>
         <div class="sb-card">
             <h6><i class="bi bi-diagram-3"></i> Site Template Guide</h6>
             <p class="text-muted small">A full site template is a kit that combines one theme with a curated set of builder templates. Brands choose one kit during intake, and Warren uses that kit instead of the global defaults.</p>
@@ -344,6 +399,37 @@
                         <div class="col-md-6">
                             <label class="form-label">Prompt Notes</label>
                             <input type="text" name="prompt_notes" id="site_tmpl_notes" class="form-control" placeholder="Use the page shell exactly. Keep proof above the first CTA.">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Source URL</label>
+                            <input type="url" name="source_url" id="site_tmpl_source_url" class="form-control" placeholder="https://example.com/approved-draft">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Source WP Page ID</label>
+                            <input type="number" name="source_wp_page_id" id="site_tmpl_source_wp_page_id" class="form-control" value="0">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">WP Template Slug</label>
+                            <input type="text" name="wp_template_slug" id="site_tmpl_wp_template_slug" class="form-control" placeholder="templates/warren-home.php">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Best Verticals</label>
+                            <input type="text" name="verticals" id="site_tmpl_verticals" class="form-control" placeholder="home services, med spa, legal">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Capture Notes</label>
+                            <input type="text" name="capture_notes" id="site_tmpl_capture_notes" class="form-control" placeholder="Hero, proof strip, ACF group, conversion notes.">
+                        </div>
+                        <div class="col-12">
+                            <div class="form-check form-switch">
+                                <input type="checkbox" name="acf_enabled" id="site_tmpl_acf_enabled" class="form-check-input" value="1">
+                                <label class="form-check-label" for="site_tmpl_acf_enabled">Fill mapped Advanced Custom Fields when publishing to WordPress</label>
+                            </div>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">ACF Field Map JSON</label>
+                            <textarea name="acf_field_map_json" id="site_tmpl_acf_map" class="form-control font-monospace" rows="12" placeholder='{"default":{"hero_headline":"title"}}'></textarea>
+                            <div class="form-text">Left side is the ACF field name. Right side is the WARREN source, such as title, excerpt, content, seo_title, seo_description, intake.priority_seo_locations, or brand.primary_services.</div>
                         </div>
                         <div class="col-12">
                             <label class="form-label">Included Templates</label>
@@ -990,6 +1076,8 @@ function editTheme(id) {
 }
 
 // ── Site Templates ──
+const defaultAcfFieldMapJson = {{ (default_acf_field_map_json or '{}')|tojson }};
+
 function clearSiteTemplateForm() {
     document.getElementById('site_tmpl_id').value = '';
     document.getElementById('site_tmpl_modal_title').textContent = 'New Site Template';
@@ -998,6 +1086,13 @@ function clearSiteTemplateForm() {
     document.getElementById('site_tmpl_desc').value = '';
     document.getElementById('site_tmpl_theme').value = '0';
     document.getElementById('site_tmpl_notes').value = '';
+    document.getElementById('site_tmpl_source_url').value = '';
+    document.getElementById('site_tmpl_source_wp_page_id').value = '0';
+    document.getElementById('site_tmpl_wp_template_slug').value = '';
+    document.getElementById('site_tmpl_verticals').value = '';
+    document.getElementById('site_tmpl_capture_notes').value = '';
+    document.getElementById('site_tmpl_acf_enabled').checked = false;
+    document.getElementById('site_tmpl_acf_map').value = defaultAcfFieldMapJson;
     document.getElementById('site_tmpl_sort').value = '0';
     document.getElementById('site_tmpl_default').checked = false;
     document.getElementById('site_tmpl_active').checked = true;
@@ -1016,6 +1111,13 @@ function editSiteTemplate(id) {
             document.getElementById('site_tmpl_desc').value = t.description || '';
             document.getElementById('site_tmpl_theme').value = String(t.theme_id || 0);
             document.getElementById('site_tmpl_notes').value = t.prompt_notes || '';
+            document.getElementById('site_tmpl_source_url').value = t.source_url || '';
+            document.getElementById('site_tmpl_source_wp_page_id').value = t.source_wp_page_id || 0;
+            document.getElementById('site_tmpl_wp_template_slug').value = t.wp_template_slug || '';
+            document.getElementById('site_tmpl_verticals').value = t.verticals || '';
+            document.getElementById('site_tmpl_capture_notes').value = t.capture_notes || '';
+            document.getElementById('site_tmpl_acf_enabled').checked = !!t.acf_enabled;
+            document.getElementById('site_tmpl_acf_map').value = t.acf_field_map_json || JSON.stringify(t.acf_field_map || {}, null, 2);
             document.getElementById('site_tmpl_sort').value = t.sort_order || 0;
             document.getElementById('site_tmpl_default').checked = !!t.is_default;
             document.getElementById('site_tmpl_active').checked = !!t.is_active;

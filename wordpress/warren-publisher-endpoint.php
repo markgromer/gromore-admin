@@ -2,7 +2,7 @@
 /**
  * Plugin Name: GroMore Warren Publisher Endpoint
  * Description: Adds authenticated GroMore/Warren publishing endpoints and pull publishing for hosts that block inbound publish requests.
- * Version: 1.3.2
+ * Version: 1.4.0
  */
 
 if (!defined('ABSPATH')) {
@@ -108,6 +108,24 @@ function gromore_warren_publish_payload_array($payload) {
     return gromore_warren_publish($request);
 }
 
+function gromore_warren_sanitize_field_value($value) {
+    if (is_array($value)) {
+        $clean = array();
+        foreach ($value as $key => $inner) {
+            $clean_key = is_string($key) ? sanitize_key($key) : $key;
+            $clean[$clean_key] = gromore_warren_sanitize_field_value($inner);
+        }
+        return $clean;
+    }
+    if (is_bool($value) || is_int($value) || is_float($value)) {
+        return $value;
+    }
+    if ($value === null) {
+        return '';
+    }
+    return wp_kses_post((string) $value);
+}
+
 function gromore_warren_publish($request) {
     $type = sanitize_key($request->get_param('type') ?: 'post');
     if (!in_array($type, array('post', 'page'), true)) {
@@ -165,6 +183,11 @@ function gromore_warren_publish($request) {
         return $saved_id;
     }
 
+    $page_template = sanitize_text_field((string) $request->get_param('template'));
+    if ($type === 'page' && $page_template && current_user_can('edit_post', $saved_id)) {
+        update_post_meta($saved_id, '_wp_page_template', $page_template);
+    }
+
     $featured_media = absint($request->get_param('featured_media'));
     if ($featured_media) {
         set_post_thumbnail($saved_id, $featured_media);
@@ -175,7 +198,25 @@ function gromore_warren_publish($request) {
         foreach ($meta as $key => $value) {
             $key = sanitize_key($key);
             if ($key) {
-                update_post_meta($saved_id, $key, sanitize_text_field((string) $value));
+                $clean_value = gromore_warren_sanitize_field_value($value);
+                update_post_meta($saved_id, $key, is_array($clean_value) ? wp_json_encode($clean_value) : $clean_value);
+            }
+        }
+    }
+
+    $acf = $request->get_param('acf');
+    $acf_count = 0;
+    if (is_array($acf) && current_user_can('edit_post', $saved_id)) {
+        foreach ($acf as $key => $value) {
+            $key = sanitize_key($key);
+            if ($key) {
+                $clean_value = gromore_warren_sanitize_field_value($value);
+                if (function_exists('update_field')) {
+                    update_field($key, $clean_value, $saved_id);
+                } else {
+                    update_post_meta($saved_id, $key, is_array($clean_value) ? wp_json_encode($clean_value) : $clean_value);
+                }
+                $acf_count++;
             }
         }
     }
@@ -186,6 +227,8 @@ function gromore_warren_publish($request) {
         'type' => $type,
         'status' => get_post_status($saved_id),
         'link' => get_permalink($saved_id),
+        'template' => $page_template,
+        'acf_fields_updated' => $acf_count,
     ));
 }
 

@@ -4239,6 +4239,17 @@
                                             {% if site_template.theme_name %}
                                             <span class="d-block" style="font-size:.72rem; opacity:.72; margin-bottom:.2rem;">Theme: {{ site_template.theme_name }}</span>
                                             {% endif %}
+                                            <span class="d-flex align-items-center gap-1 flex-wrap" style="margin-bottom:.35rem;">
+                                                {% if site_template.acf_enabled %}
+                                                <span class="badge bg-info text-dark" style="font-size:.62rem;">ACF mapped</span>
+                                                {% endif %}
+                                                {% if site_template.wp_template_slug %}
+                                                <span class="badge bg-light text-dark border" style="font-size:.62rem;">WP template</span>
+                                                {% endif %}
+                                                {% if site_template.verticals %}
+                                                <span class="badge bg-light text-dark border" style="font-size:.62rem;">{{ site_template.verticals }}</span>
+                                                {% endif %}
+                                            </span>
                                             {% if site_template.description %}
                                             <span class="d-block" style="font-size:.78rem; opacity:.86; line-height:1.45;">{{ site_template.description }}</span>
                                             {% else %}

@@ -4531,6 +4531,9 @@ def create_app():
             image_count=image_count,
             page_types=page_types,
             google_font_choices=GOOGLE_FONT_CHOICES,
+            default_acf_field_map_json=client_portal_module._site_builder_json_dumps_pretty(
+                client_portal_module._default_site_builder_acf_field_map()
+            ),
         )
 
     @app.route("/site-builder-admin/generate")
@@ -4856,6 +4859,8 @@ def create_app():
             return jsonify(ok=False, error="WordPress is not connected. Add credentials in the intake and regenerate or reconnect the brand."), 400
 
         pages = db.get_site_pages(build_id)
+        site_template = client_portal_module._site_builder_template_for_build(db, build)
+        wp_template_slug = str((site_template or {}).get("wp_template_slug") or "").strip()
         published = 0
         errors = []
         for page in pages:
@@ -4870,6 +4875,8 @@ def create_app():
                 slug=page.get("slug", ""),
                 seo_title=page.get("seo_title", ""),
                 seo_description=page.get("seo_description", ""),
+                wp_template_slug=wp_template_slug,
+                acf_fields=client_portal_module._site_builder_acf_fields_for_page(page, build, brand, site_template),
             )
             if result.get("ok"):
                 db.update_site_page_wp(page["id"], result["wp_page_id"], result["wp_page_url"])
@@ -5202,10 +5209,29 @@ def create_app():
             "theme_id": int(request.form.get("theme_id") or 0),
             "template_ids": template_ids,
             "prompt_notes": request.form.get("prompt_notes", ""),
+            "source_url": request.form.get("source_url", "").strip(),
+            "source_wp_page_id": int(request.form.get("source_wp_page_id") or 0),
+            "wp_template_slug": request.form.get("wp_template_slug", "").strip(),
+            "acf_enabled": 1 if request.form.get("acf_enabled") else 0,
+            "verticals": request.form.get("verticals", "").strip(),
+            "capture_notes": request.form.get("capture_notes", "").strip(),
             "sort_order": int(request.form.get("sort_order", 0)),
             "is_default": 1 if request.form.get("is_default") else 0,
             "is_active": 1 if request.form.get("is_active") else 0,
         }
+        acf_raw = (request.form.get("acf_field_map_json") or "").strip()
+        if not acf_raw:
+            acf_raw = client_portal_module._site_builder_json_dumps_pretty(
+                client_portal_module._default_site_builder_acf_field_map()
+            )
+        try:
+            acf_map = json.loads(acf_raw)
+            if not isinstance(acf_map, dict):
+                raise ValueError("ACF map must be a JSON object.")
+            data["acf_field_map_json"] = json.dumps(acf_map, ensure_ascii=True)
+        except Exception as exc:
+            flash(f"ACF field map is invalid JSON: {exc}", "danger")
+            return redirect(url_for("site_builder_admin", tab="site-templates"))
         if not data["name"]:
             flash("Site template name is required.", "danger")
             return redirect(url_for("site_builder_admin", tab="site-templates"))
@@ -5229,6 +5255,44 @@ def create_app():
             f"{result['site_templates_created']} created, {result['site_templates_updated']} refreshed.",
             "success",
         )
+        return redirect(url_for("site_builder_admin", tab="site-templates"))
+
+    @app.route("/site-builder-admin/site-templates/capture-wordpress", methods=["POST"])
+    @login_required
+    def sb_admin_site_template_capture_wordpress():
+        from webapp.site_builder import _slugify
+
+        source_url = request.form.get("source_url", "").strip()
+        name = request.form.get("name", "").strip()
+        if not source_url or not name:
+            flash("Template name and WordPress/source URL are required.", "danger")
+            return redirect(url_for("site_builder_admin", tab="site-templates"))
+        acf_map = client_portal_module._default_site_builder_acf_field_map()
+        prompt_notes = (
+            "Captured from an approved WordPress design. Keep the page structure stable, "
+            "write original SEO-rich copy, and fill the mapped ACF fields instead of inventing a new visual system."
+        )
+        capture_notes = request.form.get("capture_notes", "").strip()
+        data = {
+            "name": name,
+            "slug": request.form.get("slug", "").strip() or _slugify(name),
+            "description": request.form.get("description", "").strip() or "WordPress-approved style captured for reusable WARREN builds.",
+            "source_url": source_url,
+            "source_wp_page_id": int(request.form.get("source_wp_page_id") or 0),
+            "wp_template_slug": request.form.get("wp_template_slug", "").strip(),
+            "verticals": request.form.get("verticals", "").strip(),
+            "capture_notes": capture_notes,
+            "prompt_notes": prompt_notes if not capture_notes else f"{prompt_notes} Notes: {capture_notes[:500]}",
+            "acf_enabled": 1,
+            "acf_field_map_json": json.dumps(acf_map, ensure_ascii=True),
+            "theme_id": int(request.form.get("theme_id") or 0),
+            "template_ids": [],
+            "sort_order": int(request.form.get("sort_order") or 0),
+            "is_default": 0,
+            "is_active": 1,
+        }
+        db.create_sb_site_template(data)
+        flash("WordPress style captured as a reusable site template. Edit its ACF map when you know the exact field names.", "success")
         return redirect(url_for("site_builder_admin", tab="site-templates"))
 
     @app.route("/site-builder-admin/site-templates/<int:tid>/delete", methods=["POST"])

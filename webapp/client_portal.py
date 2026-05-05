@@ -10224,6 +10224,13 @@ def _site_builder_site_template_snapshot(site_template, theme=None, templates=No
         "theme_name": site_template.get("theme_name") or "",
         "template_ids": list(site_template.get("template_ids") or []),
         "template_count": int(site_template.get("template_count") or len(site_template.get("template_ids") or [])),
+        "source_url": site_template.get("source_url") or "",
+        "source_wp_page_id": int(site_template.get("source_wp_page_id") or 0),
+        "wp_template_slug": site_template.get("wp_template_slug") or "",
+        "acf_enabled": int(site_template.get("acf_enabled") or 0),
+        "acf_field_map": site_template.get("acf_field_map") or {},
+        "verticals": site_template.get("verticals") or "",
+        "capture_notes": site_template.get("capture_notes") or "",
     }
     if isinstance(theme, dict) and theme:
         snapshot["theme_name"] = theme.get("name") or snapshot.get("theme_name") or ""
@@ -10231,6 +10238,37 @@ def _site_builder_site_template_snapshot(site_template, theme=None, templates=No
     if templates:
         snapshot["builder_templates"] = _site_builder_template_snapshots(templates)
     return snapshot
+
+
+def _default_site_builder_acf_field_map():
+    return {
+        "default": {
+            "warren_page_title": "title",
+            "warren_hero_headline": "title",
+            "warren_hero_subheadline": "excerpt",
+            "warren_body_html": "content",
+            "warren_full_html": "full_html",
+            "warren_seo_title": "seo_title",
+            "warren_seo_description": "seo_description",
+            "warren_primary_keyword": "primary_keyword",
+            "warren_secondary_keywords": "secondary_keywords",
+            "warren_faq_items": "faq_items",
+            "warren_schema_json": "schemas",
+        },
+        "home": {
+            "hero_headline": "title",
+            "hero_subheadline": "excerpt",
+            "primary_cta_text": "intake.cta_text",
+            "service_area_summary": "intake.priority_seo_locations",
+            "services_summary": "brand.primary_services",
+            "seo_title": "seo_title",
+            "seo_description": "seo_description",
+        },
+    }
+
+
+def _site_builder_json_dumps_pretty(value):
+    return json.dumps(value or {}, indent=2, ensure_ascii=True)
 
 
 def _site_builder_prompt_override_snapshots(overrides):
@@ -14176,6 +14214,8 @@ def _wp_should_try_custom_endpoint(status_code, response_text):
     body_lower = (response_text or "").lower()
     if "sgcaptcha" in body_lower or "/.well-known/sgcaptcha" in body_lower or "captcha" in body_lower:
         return True
+    if int(status_code or 0) == 400 and any(marker in body_lower for marker in ("acf", "template", "rest_invalid_param")):
+        return True
     return int(status_code or 0) in {202, 403, 406, 418, 429}
 
 
@@ -14189,6 +14229,118 @@ def _wp_pull_queue_result(message=""):
             "Open WordPress > Settings > GroMore Publisher and click Pull Queued Post Now, or wait for the helper's five-minute WP-Cron pull."
         ),
     }
+
+
+def _site_builder_template_for_build(db, build):
+    intake = {}
+    if isinstance(build, dict):
+        intake = build.get("intake") or {}
+        if not intake:
+            try:
+                intake = json.loads(build.get("intake_json") or "{}")
+            except Exception:
+                intake = {}
+    template_id = int(((intake.get("builder_site_template") or {}).get("id")) or 0)
+    if template_id:
+        return db.get_sb_site_template(template_id) or {}
+    return {}
+
+
+def _site_builder_source_value(source, *, page, build, brand):
+    if isinstance(source, dict):
+        if "literal" in source:
+            return source.get("literal")
+        raw_source = source.get("source") or source.get("path") or ""
+        value = _site_builder_source_value(raw_source, page=page, build=build, brand=brand)
+        if (value is None or value == "" or value == []) and "fallback" in source:
+            value = _site_builder_source_value(source.get("fallback"), page=page, build=build, brand=brand)
+        if source.get("as_json") and not isinstance(value, str):
+            return json.dumps(value or [], ensure_ascii=True)
+        if source.get("join") and isinstance(value, list):
+            return str(source.get("join")).join(str(item) for item in value)
+        return value
+    if isinstance(source, list):
+        return [_site_builder_source_value(item, page=page, build=build, brand=brand) for item in source]
+    key = str(source or "").strip()
+    if not key:
+        return ""
+    if key.startswith("literal:"):
+        return key.split(":", 1)[1]
+
+    intake = {}
+    if isinstance(build, dict):
+        intake = build.get("intake") or {}
+        if not intake:
+            try:
+                intake = json.loads(build.get("intake_json") or "{}")
+            except Exception:
+                intake = {}
+
+    page_values = {
+        "id": page.get("id"),
+        "page_type": page.get("page_type"),
+        "label": page.get("label"),
+        "slug": page.get("slug"),
+        "title": page.get("title"),
+        "content": page.get("content"),
+        "content_html": page.get("content"),
+        "full_html": page.get("full_html") or page.get("content"),
+        "excerpt": page.get("excerpt"),
+        "seo_title": page.get("seo_title"),
+        "seo_description": page.get("seo_description"),
+        "primary_keyword": page.get("primary_keyword"),
+        "secondary_keywords": page.get("secondary_keywords"),
+        "faq_items": page.get("faq_items") or [],
+        "schemas": page.get("schemas") or [],
+        "schema_json": page.get("schemas") or [],
+        "schema_html": page.get("schema_html"),
+    }
+    if key in page_values:
+        return page_values[key]
+    if key.startswith("page."):
+        return page_values.get(key.split(".", 1)[1], "")
+    if key.startswith("brand."):
+        return (brand or {}).get(key.split(".", 1)[1], "")
+    if key.startswith("intake."):
+        return intake.get(key.split(".", 1)[1], "")
+    return key
+
+
+def _site_builder_acf_fields_for_page(page, build, brand, site_template):
+    if not site_template or not int(site_template.get("acf_enabled") or 0):
+        return {}
+    acf_map = site_template.get("acf_field_map") or {}
+    if not acf_map:
+        try:
+            acf_map = json.loads(site_template.get("acf_field_map_json") or "{}")
+        except Exception:
+            acf_map = {}
+    if not isinstance(acf_map, dict):
+        return {}
+
+    page_type = str(page.get("page_type") or "").strip()
+    page_map = {}
+    if isinstance(acf_map.get("default"), dict):
+        page_map.update(acf_map.get("default") or {})
+    if isinstance(acf_map.get("pages"), dict) and isinstance(acf_map["pages"].get(page_type), dict):
+        page_map.update(acf_map["pages"][page_type])
+    if isinstance(acf_map.get(page_type), dict):
+        page_map.update(acf_map[page_type])
+    if not page_map and all(not isinstance(v, dict) for v in acf_map.values()):
+        page_map = acf_map
+
+    fields = {}
+    for field_name, source in (page_map or {}).items():
+        clean_name = str(field_name or "").strip()
+        if not clean_name:
+            continue
+        value = _site_builder_source_value(source, page=page, build=build, brand=brand)
+        if value is None:
+            continue
+        if value == "" and not (isinstance(source, dict) and source.get("allow_empty")):
+            continue
+        fields[clean_name] = value
+    return fields
 
 
 def _wp_custom_publish_url(brand):
@@ -14271,7 +14423,7 @@ def _wp_helper_payload_steps(payload):
             "title": payload.get("title") or "Untitled",
             "status": "draft",
         }
-        for key in ("slug", "parent"):
+        for key in ("slug", "parent", "template"):
             if payload.get(key):
                 create_payload[key] = payload[key]
         steps = [create_payload]
@@ -14282,7 +14434,7 @@ def _wp_helper_payload_steps(payload):
             "excerpt": payload.get("excerpt") or "",
             "status": "draft",
         }
-        for key in ("title", "slug", "parent", "meta", "featured_media"):
+        for key in ("title", "slug", "parent", "meta", "featured_media", "template", "acf"):
             if payload.get(key):
                 update_payload[key] = payload[key]
         steps.append(update_payload)
@@ -15548,7 +15700,8 @@ def client_download_wordpress_helper_plugin():
 
 
 def _publish_wp_page(brand, title, content, excerpt="", slug="",
-                     seo_title="", seo_description="", status="publish", parent_id=0):
+                     seo_title="", seo_description="", status="publish", parent_id=0,
+                     wp_template_slug="", acf_fields=None):
     """Publish a *page* (not post) to WordPress via REST API."""
     import requests as req_lib
 
@@ -15567,11 +15720,16 @@ def _publish_wp_page(brand, title, content, excerpt="", slug="",
         create_data["slug"] = slug
     if parent_id:
         create_data["parent"] = int(parent_id)
+    wp_template_slug = str(wp_template_slug or "").strip()
+    if wp_template_slug:
+        create_data["template"] = wp_template_slug
 
     update_data = {
         "content": _sanitize_wp_post_content(content),
         "excerpt": excerpt,
     }
+    if wp_template_slug:
+        update_data["template"] = wp_template_slug
     meta = {}
     if seo_title:
         meta["_yoast_wpseo_title"] = seo_title
@@ -15579,6 +15737,8 @@ def _publish_wp_page(brand, title, content, excerpt="", slug="",
         meta["_yoast_wpseo_metadesc"] = seo_description
     if meta:
         update_data["meta"] = meta
+    if isinstance(acf_fields, dict) and acf_fields:
+        update_data["acf"] = acf_fields
 
     warren_payload = {
         "type": "page",
@@ -15590,6 +15750,10 @@ def _publish_wp_page(brand, title, content, excerpt="", slug="",
         "meta": meta,
         "parent": int(parent_id or 0),
     }
+    if wp_template_slug:
+        warren_payload["template"] = wp_template_slug
+    if isinstance(acf_fields, dict) and acf_fields:
+        warren_payload["acf"] = acf_fields
 
     def _fallback_or_error(status_code, response_text):
         original_error = _wp_security_challenge_error(status_code, response_text, "Page publish")
@@ -16277,6 +16441,8 @@ def client_site_builder_publish(build_id):
         return jsonify(ok=False, error="WordPress is not connected. Add credentials in Settings."), 400
 
     pages = db.get_site_pages(build_id)
+    site_template = _site_builder_template_for_build(db, build)
+    wp_template_slug = str((site_template or {}).get("wp_template_slug") or "").strip()
     published = 0
     errors = []
     for page in pages:
@@ -16291,6 +16457,8 @@ def client_site_builder_publish(build_id):
             slug=page.get("slug", ""),
             seo_title=page.get("seo_title", ""),
             seo_description=page.get("seo_description", ""),
+            wp_template_slug=wp_template_slug,
+            acf_fields=_site_builder_acf_fields_for_page(page, build, brand, site_template),
         )
         if result.get("ok"):
             db.update_site_page_wp(page["id"], result["wp_page_id"], result["wp_page_url"])
