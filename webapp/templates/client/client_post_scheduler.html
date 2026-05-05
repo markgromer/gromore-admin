@@ -18,6 +18,7 @@
     .status-badge { font-size: .75rem; font-weight: 600; padding: 3px 10px; border-radius: 20px; }
     .status-pending { background: #fef3c7; color: #92400e; }
     .status-scheduled { background: #dbeafe; color: #1e40af; }
+    .status-queued { background: #f3e8ff; color: #6b21a8; }
     .status-published { background: #dcfce7; color: #166534; }
     .status-failed { background: #fee2e2; color: #991b1b; }
 
@@ -134,6 +135,29 @@
         display: inline-flex; align-items: center; gap: .35rem;
         font-size: .72rem; font-weight: 600; padding: 4px 10px;
         border-radius: 999px; background: #eef2ff; color: #3730a3;
+    }
+    .platform-chip {
+        display: inline-flex; align-items: center; gap: .35rem;
+        font-size: .72rem; font-weight: 700; padding: 4px 10px;
+        border-radius: 999px; background: #ecfeff; color: #155e75;
+    }
+    .channel-grid {
+        display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+        gap: .75rem;
+    }
+    .channel-option {
+        display: flex; align-items: flex-start; gap: .65rem;
+        border: 1px solid var(--line); border-radius: 12px; background: #fff;
+        padding: .75rem .85rem; min-height: 92px;
+    }
+    .channel-option.disabled { background: #f8fafc; opacity: .72; }
+    .channel-option i { font-size: 1.1rem; color: var(--primary); margin-top: .08rem; }
+    .channel-option.disabled i { color: #94a3b8; }
+    .channel-option strong { display: block; font-size: .9rem; color: var(--text-strong); }
+    .channel-option small { display: block; color: var(--text-muted); line-height: 1.35; }
+    .channel-roadmap {
+        border: 1px solid #dbeafe; border-radius: 12px; background: #f8fbff;
+        padding: .85rem 1rem; font-size: .84rem; color: var(--text-muted);
     }
     .composer-helper {
         background: linear-gradient(135deg, #f8fafc, #eef2ff);
@@ -417,15 +441,15 @@
 
 <div class="page-title-bar">
     <h5><i class="bi bi-calendar2-week"></i>Post Scheduler</h5>
-    <p>Schedule Facebook posts, draft them with AI by post type, and generate a 2 or 4 week content calendar you can schedule in bulk.</p>
+    <p>Schedule organic posts across connected channels, draft them with AI by post type, and generate a 2 or 4 week content calendar you can schedule in bulk.</p>
 </div>
 
-{% if not has_facebook %}
+{% if not has_scheduler_channel %}
 <div class="card border-0 shadow-sm mb-4" style="border-radius:var(--radius);">
     <div class="card-body p-4 text-center">
-        <i class="bi bi-facebook" style="font-size:3rem; color:#1877f2;"></i>
-        <h5 class="mt-3 fw-bold">Connect Facebook First</h5>
-        <p class="text-muted mb-3">To schedule posts, connect your Meta account with page publishing permissions.</p>
+        <i class="bi bi-share" style="font-size:3rem; color:#4f46e5;"></i>
+        <h5 class="mt-3 fw-bold">Connect a Publishing Channel First</h5>
+        <p class="text-muted mb-3">To schedule posts, connect Meta and save the Page or Instagram account WARREN should publish to.</p>
         <a href="{{ url_for('client.client_settings') }}" class="btn btn-primary">
             <i class="bi bi-plug me-1"></i> Go to Connections
         </a>
@@ -572,6 +596,30 @@
 <div class="card border-0 shadow-sm mb-4" style="border-radius:var(--radius);">
     <div class="card-body p-4">
         <h5 class="fw-bold mb-3">Compose a Post</h5>
+        <div class="composer-helper mb-3">
+            <div class="d-flex flex-wrap justify-content-between gap-2 align-items-start mb-2">
+                <div>
+                    <div class="fw-semibold" style="color:var(--text-strong);">Publishing Channels</div>
+                    <div class="text-muted" style="font-size:.84rem;">Select every connected channel this post should go to. Unavailable channels are shown with the setup work they need.</div>
+                </div>
+                <a href="{{ url_for('client.client_settings') }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-sliders me-1"></i> Manage IDs</a>
+            </div>
+            <div class="channel-grid" id="composeChannelGrid">
+                {% for channel in scheduler_channels %}
+                <label class="channel-option {{ '' if channel.ready and channel.direct else 'disabled' }}">
+                    <input class="form-check-input mt-1" type="checkbox" data-compose-platform value="{{ channel.key }}"
+                           {% if channel.default %}checked{% endif %}
+                           {% if not channel.ready or not channel.direct %}disabled{% endif %}>
+                    <i class="bi {{ channel.icon }}"></i>
+                    <span>
+                        <strong>{{ channel.label }}</strong>
+                        <small>{{ channel.detail }}</small>
+                        {% if not channel.ready or not channel.direct %}<small class="mt-1">{{ channel.setup }}</small>{% endif %}
+                    </span>
+                </label>
+                {% endfor %}
+            </div>
+        </div>
         {% if facebook_storytelling_profile.has_profile %}
         <div class="storytelling-card mb-3">
             <div class="d-flex flex-wrap justify-content-between gap-2 align-items-start">
@@ -604,7 +652,7 @@
             <div class="composer-helper mb-3">
                 <div class="row g-3 align-items-end">
                     <div class="col-md-3">
-                        <label class="form-label fw-medium">Facebook Post Type</label>
+                        <label class="form-label fw-medium">Post Type</label>
                         <select class="form-select" id="composePostType">
                             {% for post_type in facebook_post_types %}
                             <option value="{{ post_type.key }}">{{ post_type.label }}</option>
@@ -664,7 +712,7 @@
             <div class="mb-3">
                 <label class="form-label fw-medium">Schedule Date &amp; Time</label>
                 <input type="datetime-local" class="form-control" id="composeSchedule" style="max-width:300px;">
-                <small class="text-muted">Must be 10 min to 75 days in the future (Facebook requirement).</small>
+                <small class="text-muted">Must be 10 min to 75 days in the future. Facebook is platform-scheduled; Instagram is queued by WARREN and published when due.</small>
             </div>
             <div class="mb-3">
                 <label class="form-label fw-medium">Link URL <small class="text-muted">(optional)</small></label>
@@ -695,7 +743,7 @@
                 {% endif %}
             </div>
             <button type="submit" class="btn btn-primary">
-                <i class="bi bi-send me-1"></i> Schedule Facebook Post
+                <i class="bi bi-send me-1"></i> Schedule Selected Channels
             </button>
             <div id="composeResult" class="mt-2"></div>
         </form>
@@ -706,7 +754,7 @@
     <div class="card-body p-4">
         <h5 class="fw-bold mb-2">Generate an AI Content Calendar</h5>
         <p class="text-muted mb-3" style="font-size:.9rem;">
-            Build a 2 or 4 week Facebook calendar, preview it in the CSV tab, then schedule the full batch in one pass.
+            Build a 2 or 4 week organic calendar, preview it in the CSV tab, then schedule the full batch to the selected channels.
         </p>
         {% if has_ai_generation %}
         <div class="row g-3 align-items-end mb-3">
@@ -787,8 +835,20 @@
         <h5 class="fw-bold mb-2">Upload Posts via CSV</h5>
         <p class="text-muted mb-3" style="font-size:.88rem;">
             Upload a CSV file with columns: <code>message</code>, <code>scheduled_at</code> (YYYY-MM-DD HH:MM),
-            <code>post_type</code> (optional), <code>first_comment</code> (optional), <code>image_url</code> (optional), <code>link_url</code> (optional).
+            <code>post_type</code> (optional), <code>platforms</code> (optional), <code>first_comment</code> (optional), <code>image_url</code> (optional), <code>link_url</code> (optional).
         </p>
+        <div class="channel-roadmap mb-3">
+            <div class="fw-semibold mb-2" style="color:var(--text-strong);">Default CSV channels</div>
+            <div class="d-flex flex-wrap gap-3">
+                {% for channel in scheduler_channels if channel.ready and channel.direct %}
+                <label class="d-inline-flex align-items-center gap-2 mb-0">
+                    <input class="form-check-input" type="checkbox" data-csv-default-platform value="{{ channel.key }}" {% if channel.default %}checked{% endif %}>
+                    <span><i class="bi {{ channel.icon }} me-1"></i>{{ channel.label }}</span>
+                </label>
+                {% endfor %}
+            </div>
+            <div class="text-muted mt-2" style="font-size:.8rem;">Rows can override this with a <code>platforms</code> value such as <code>facebook,instagram</code>. Instagram rows need an image.</div>
+        </div>
 
         <div class="upload-zone mb-3" id="csvDropZone" onclick="document.getElementById('csvFileInput').click()">
             <i class="bi bi-cloud-arrow-up" style="font-size:2rem; color:var(--primary);"></i>
@@ -814,7 +874,7 @@
             {% endif %}
             <div class="table-responsive" style="max-height:400px; overflow-y:auto;">
                 <table class="table table-sm csv-preview-table" id="csvTable">
-                    <thead><tr><th class="csv-select-col">Use</th><th>#</th><th>Type</th><th>Message</th><th>First Comment</th><th>Publish Time</th><th>Image</th><th>Link</th></tr></thead>
+                    <thead><tr><th class="csv-select-col">Use</th><th>#</th><th>Channels</th><th>Type</th><th>Message</th><th>First Comment</th><th>Publish Time</th><th>Image</th><th>Link</th></tr></thead>
                     <tbody></tbody>
                 </table>
             </div>
@@ -829,10 +889,10 @@
 
         <div class="mt-3 p-3" style="background:#f8fafc; border-radius:10px;">
             <h6 class="fw-bold mb-2" style="font-size:.88rem;">CSV Template</h6>
-            <pre style="font-size:.82rem; margin:0; background:#fff; padding:.75rem; border-radius:8px; border:1px solid var(--line);">post_type,message,first_comment,scheduled_at,image_url,link_url
-value,"Three signs your water heater needs attention before it quits","Which one have you noticed first?",2026-04-01 09:00,,https://example.com
-behind_the_scenes,"A quick look at how our crew preps before a drain camera inspection","We can share what we look for on camera if that helps.",2026-04-07 10:30,https://drive.google.com/...,
-special_offer,"Spring special: book now and ask about this month's inspection offer","Comment or message us if you want the details.",2026-04-15 12:00,,https://example.com/spring</pre>
+            <pre style="font-size:.82rem; margin:0; background:#fff; padding:.75rem; border-radius:8px; border:1px solid var(--line);">platforms,post_type,message,first_comment,scheduled_at,image_url,link_url
+facebook,value,"Three signs your water heater needs attention before it quits","Which one have you noticed first?",2026-04-01 09:00,,https://example.com
+facebook,behind_the_scenes,"A quick look at how our crew preps before a drain camera inspection","We can share what we look for on camera if that helps.",2026-04-07 10:30,https://drive.google.com/...,
+"facebook,instagram",special_offer,"Spring special: book now and ask about this month's inspection offer","Comment or message us if you want the details.",2026-04-15 12:00,https://drive.google.com/...,https://example.com/spring</pre>
             <button class="btn btn-outline-secondary btn-sm mt-2" onclick="downloadCsvTemplate()">
                 <i class="bi bi-download me-1"></i> Download Template
             </button>
@@ -901,9 +961,10 @@ special_offer,"Spring special: book now and ask about this month's inspection of
                         <div class="d-flex justify-content-between align-items-start mb-2">
                             <div class="d-flex flex-column gap-1">
                                 <span class="status-badge status-{{ post.status }}">{{ post.status|title }}</span>
+                                <span class="platform-chip"><i class="bi {{ post.platform_icon }}"></i>{{ post.platform_label }}</span>
                                 {% if post.post_type_label %}<span class="post-type-chip">{{ post.post_type_label }}</span>{% endif %}
                             </div>
-                            {% if post.status in ('pending', 'scheduled', 'failed') %}
+                            {% if post.status in ('pending', 'queued', 'scheduled', 'failed') %}
                             <button class="btn btn-link btn-sm text-danger p-0" data-post-id="{{ post.id }}" onclick="deletePost(this.dataset.postId)" title="Delete">
                                 <i class="bi bi-trash"></i>
                             </button>
@@ -962,12 +1023,14 @@ special_offer,"Spring special: book now and ask about this month's inspection of
 <script type="application/json" id="facebookCharacterCadenceOptions">{{ facebook_character_cadence_options|tojson }}</script>
 <script type="application/json" id="facebookPostTypesData">{{ facebook_post_types|tojson }}</script>
 <script type="application/json" id="facebookStoryPresetsData">{{ facebook_story_preset_options|tojson }}</script>
+<script type="application/json" id="schedulerChannelsData">{{ scheduler_channels|tojson }}</script>
 <script>
 var csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
 var calendarMixes = JSON.parse(document.getElementById('calendarMixesData').textContent || '[]');
 var hasDrive = JSON.parse(document.getElementById('hasDriveData').textContent || 'false');
 var facebookPostTypes = JSON.parse(document.getElementById('facebookPostTypesData').textContent || '[]');
 var facebookStoryPresets = JSON.parse(document.getElementById('facebookStoryPresetsData').textContent || '[]');
+var schedulerChannels = JSON.parse(document.getElementById('schedulerChannelsData').textContent || '[]');
 var pendingCsvImageRowIndex = null;
 
 function summarizeResponseError(text, status) {
@@ -1053,15 +1116,49 @@ function postStatusTitle(status) {
     return status ? status.charAt(0).toUpperCase() + status.slice(1) : 'Scheduled';
 }
 
+function channelByKey(key) {
+    return (schedulerChannels || []).find(function(channel) { return channel.key === key; }) || null;
+}
+
+function platformLabel(key) {
+    var channel = channelByKey(key);
+    return channel ? channel.label : (String(key || 'facebook').replace(/_/g, ' '));
+}
+
+function selectedComposePlatforms() {
+    var selected = Array.from(document.querySelectorAll('[data-compose-platform]:checked')).map(function(el) {
+        return el.value;
+    });
+    return selected.length ? selected : ['facebook'];
+}
+
+function selectedCsvDefaultPlatforms() {
+    var selected = Array.from(document.querySelectorAll('[data-csv-default-platform]:checked')).map(function(el) {
+        return el.value;
+    });
+    return selected.length ? selected : selectedComposePlatforms();
+}
+
+function normalizePlatformList(value, fallback) {
+    if (Array.isArray(value)) return value.length ? value : (fallback || ['facebook']);
+    var raw = String(value || '').trim();
+    if (!raw) return fallback || ['facebook'];
+    var list = raw.split(/[|,]/).map(function(item) {
+        return item.trim().toLowerCase().replace(/\s+/g, '_');
+    }).filter(Boolean);
+    return list.length ? list : (fallback || ['facebook']);
+}
+
 function renderPostCard(post) {
     post = post || {};
     var status = post.status || '';
     var html = '<div class="col-md-6 col-lg-4" data-post-status="' + escapeHtml(status) + '"><div class="post-card">';
     html += '<div class="d-flex justify-content-between align-items-start mb-2"><div class="d-flex flex-column gap-1">';
     html += '<span class="status-badge status-' + escapeHtml(status) + '">' + escapeHtml(postStatusTitle(status)) + '</span>';
+    html += '<span class="platform-chip"><i class="bi ' + escapeHtml(post.platform_icon || 'bi-share') + '"></i>' + escapeHtml(post.platform_label || 'Social') + '</span>';
     if (post.post_type_label) html += '<span class="post-type-chip">' + escapeHtml(post.post_type_label) + '</span>';
     html += '</div>';
-    if (['pending', 'scheduled', 'failed'].indexOf(status) !== -1) {
+    if (['pending', 'queued', 'scheduled', 'failed'].indexOf(status) !== -1) {
         html += '<button class="btn btn-link btn-sm text-danger p-0" data-post-id="' + escapeHtml(post.id) + '" onclick="deletePost(this.dataset.postId)" title="Delete"><i class="bi bi-trash"></i></button>';
     }
     html += '</div>';
@@ -1255,6 +1352,7 @@ function generateCalendarPlan(demoOnly) {
         csvParsedRows = (data.posts || []).map(function(post) {
             return {
                 selected: true,
+                platforms: selectedCsvDefaultPlatforms(),
                 post_type: post.post_type || '',
                 message: post.message || '',
                 first_comment: post.first_comment || '',
@@ -1286,9 +1384,11 @@ if (composeForm) {
         var img = document.getElementById('composeImageUrl') ? document.getElementById('composeImageUrl').value : '';
         var postType = document.getElementById('composePostType').value;
         var firstComment = document.getElementById('composeFirstComment') ? document.getElementById('composeFirstComment').value.trim() : '';
+        var platforms = selectedComposePlatforms();
 
         if (!msg) { showResult('composeResult', 'error', 'Message is required.'); return; }
         if (!dt) { showResult('composeResult', 'error', 'Schedule date is required.'); return; }
+        if (!platforms.length) { showResult('composeResult', 'error', 'Pick at least one publishing channel.'); return; }
 
         var btn = composeForm.querySelector('button[type="submit"]');
         btn.disabled = true;
@@ -1304,6 +1404,7 @@ if (composeForm) {
                 link_url: link,
                 image_url: img,
                 post_type: postType,
+                platforms: platforms,
                 client_timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || '',
                 client_timezone_offset_minutes: new Date().getTimezoneOffset()
             })
@@ -1311,9 +1412,12 @@ if (composeForm) {
         .then(parseJsonResponse)
         .then(function(data) {
             btn.disabled = false;
-            btn.innerHTML = '<i class="bi bi-send me-1"></i> Schedule Facebook Post';
+            btn.innerHTML = '<i class="bi bi-send me-1"></i> Schedule Selected Channels';
             if (data.ok) {
-                showResult('composeResult', 'success', 'Post scheduled! It will publish at the scheduled time.');
+                var successParts = [];
+                if (data.scheduled) successParts.push(data.scheduled + ' platform-scheduled');
+                if (data.queued) successParts.push(data.queued + ' queued for WARREN publishing');
+                showResult('composeResult', 'success', 'Post saved: ' + (successParts.join(', ') || 'scheduled') + '.');
                 composeForm.reset();
                 document.getElementById('charCount').textContent = '0';
                 document.getElementById('composeAiResult').innerHTML = '';
@@ -1326,7 +1430,7 @@ if (composeForm) {
         })
         .catch(function(err) {
             btn.disabled = false;
-            btn.innerHTML = '<i class="bi bi-send me-1"></i> Schedule Facebook Post';
+            btn.innerHTML = '<i class="bi bi-send me-1"></i> Schedule Selected Channels';
             showResult('composeResult', 'error', (err && err.message) ? err.message : 'Network error.');
         });
     });
@@ -1596,9 +1700,14 @@ function renderCsvPreviewRows(rows) {
         var imageName = row.image_name ? '<div class="text-muted mt-1" style="font-size:.78rem;">Attached: ' + escapeHtml(row.image_name) + '</div>' : '';
         var messagePreview = renderCsvMessagePreview(row.message, row.character_name, row.image_hint);
         var messageValue = escapeHtml(row.message || '');
+        var platformValue = escapeHtml(normalizePlatformList(row.platforms, selectedCsvDefaultPlatforms()).join(','));
         var tr = document.createElement('tr');
         tr.innerHTML = '<td class="csv-select-col"><input type="checkbox" class="form-check-input"' + checked + ' onchange="setCsvRowSelected(' + index + ', this.checked)"></td>' +
             '<td>' + (index + 1) + '</td>' +
+            '<td style="min-width:190px;">' +
+                '<input type="text" class="form-control form-control-sm" value="' + platformValue + '" placeholder="facebook,instagram" oninput="updateCsvRowField(' + index + ', \'platforms\', this.value)">' +
+                '<div class="text-muted mt-1" style="font-size:.72rem;">Use commas for multiple.</div>' +
+            '</td>' +
             '<td>' + escapeHtml(renderPostTypeLabel(row.post_type || 'value')) + '</td>' +
             '<td class="csv-message-cell">' + messagePreview +
                 '<label class="csv-editor-label">Edit Draft</label>' +
@@ -1671,6 +1780,8 @@ function parseCsv(text) {
     var headers = splitCsvLine(lines[0]).map(function(h) { return h.toLowerCase().replace(/[^a-z_]/g, ''); });
     var msgIdx = headers.indexOf('message');
     var dtIdx = headers.indexOf('scheduled_at');
+    var platformIdx = headers.indexOf('platforms');
+    if (platformIdx < 0) platformIdx = headers.indexOf('platform');
     var typeIdx = headers.indexOf('post_type');
     var firstCommentIdx = headers.indexOf('first_comment');
     var imgIdx = headers.indexOf('image_url');
@@ -1687,6 +1798,7 @@ function parseCsv(text) {
         var cols = splitCsvLine(lines[i]);
         var row = {
             selected: true,
+            platforms: platformIdx >= 0 ? normalizePlatformList(cols[platformIdx] || '', selectedCsvDefaultPlatforms()) : selectedCsvDefaultPlatforms(),
             post_type: typeIdx >= 0 ? (cols[typeIdx] || '') : '',
             message: cols[msgIdx] || '',
             first_comment: firstCommentIdx >= 0 ? (cols[firstCommentIdx] || '') : '',
@@ -1705,6 +1817,7 @@ function submitCsvPosts() {
     if (!csvParsedRows.length) return;
     var postsToSchedule = selectedCsvRows().map(function(row) {
         return {
+            platforms: normalizePlatformList(row.platforms, selectedCsvDefaultPlatforms()),
             post_type: row.post_type || '',
             message: row.message || '',
             first_comment: row.first_comment || '',
@@ -1732,6 +1845,7 @@ function submitCsvPosts() {
         headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
         body: JSON.stringify({
             posts: postsToSchedule,
+            platforms: selectedCsvDefaultPlatforms(),
             client_timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || '',
             client_timezone_offset_minutes: new Date().getTimezoneOffset()
         })
@@ -1739,7 +1853,10 @@ function submitCsvPosts() {
     .then(parseJsonResponse)
     .then(function(data) {
         if (data.ok) {
-            showResult('csvResult', 'success', data.scheduled + ' selected posts scheduled successfully!');
+            var parts = [];
+            if (data.scheduled) parts.push(data.scheduled + ' platform-scheduled');
+            if (data.queued) parts.push(data.queued + ' queued');
+            showResult('csvResult', 'success', (parts.join(', ') || 'Selected posts scheduled') + '.');
             csvParsedRows = [];
             renderCsvPreviewRows(csvParsedRows);
             refreshPosts({switchTab: true});
@@ -1762,7 +1879,7 @@ function clearCsvPreview() {
 }
 
 function downloadCsvTemplate() {
-    var csv = 'post_type,message,first_comment,scheduled_at,image_url,link_url\nvalue,"Your post text here","Optional first comment",2026-04-01 09:00,,https://yoursite.com\n';
+    var csv = 'platforms,post_type,message,first_comment,scheduled_at,image_url,link_url\nfacebook,value,"Your post text here","Optional first comment",2026-04-01 09:00,,https://yoursite.com\n"facebook,instagram",behind_the_scenes,"Your image post text here","",2026-04-03 10:00,https://example.com/image.jpg,https://yoursite.com\n';
     var blob = new Blob([csv], {type: 'text/csv'});
     var a = document.createElement('a');
     a.href = URL.createObjectURL(blob);

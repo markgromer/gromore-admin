@@ -130,6 +130,9 @@ class WebDB:
                 google_ads_customer_id TEXT DEFAULT '',
                 facebook_page_id TEXT DEFAULT '',
                 facebook_ads_page_id TEXT DEFAULT '',
+                instagram_account_id TEXT DEFAULT '',
+                linkedin_organization_id TEXT DEFAULT '',
+                nextdoor_business_url TEXT DEFAULT '',
                 crm_last_webhook_at TEXT DEFAULT '',
                 partner_id INTEGER DEFAULT NULL,
                 agency_partner_id INTEGER DEFAULT NULL,
@@ -919,8 +922,11 @@ class WebDB:
                 image_url TEXT DEFAULT '',
                 link_url TEXT DEFAULT '',
                 scheduled_at TEXT NOT NULL,
+                scheduled_at_utc TEXT DEFAULT '',
                 status TEXT NOT NULL DEFAULT 'pending',
                 fb_post_id TEXT DEFAULT '',
+                external_post_id TEXT DEFAULT '',
+                platform_metadata TEXT DEFAULT '{}',
                 error_message TEXT DEFAULT '',
                 created_at TEXT DEFAULT (datetime('now')),
                 published_at TEXT DEFAULT NULL,
@@ -2283,6 +2289,9 @@ class WebDB:
             ("google_drive_sheet_id", "TEXT DEFAULT ''"),
             ("facebook_page_id", "TEXT DEFAULT ''"),
             ("facebook_ads_page_id", "TEXT DEFAULT ''"),
+            ("instagram_account_id", "TEXT DEFAULT ''"),
+            ("linkedin_organization_id", "TEXT DEFAULT ''"),
+            ("nextdoor_business_url", "TEXT DEFAULT ''"),
             ("titan_snapshot_id", "TEXT DEFAULT ''"),
             ("titan_account_id", "TEXT DEFAULT ''"),
             ("titan_ghl_location_id", "TEXT DEFAULT ''"),
@@ -2516,6 +2525,9 @@ class WebDB:
             ("first_comment_id", "TEXT DEFAULT ''"),
             ("first_comment_error", "TEXT DEFAULT ''"),
             ("first_commented_at", "TEXT DEFAULT NULL"),
+            ("scheduled_at_utc", "TEXT DEFAULT ''"),
+            ("external_post_id", "TEXT DEFAULT ''"),
+            ("platform_metadata", "TEXT DEFAULT '{}'"),
         ]
         for col_name, col_def in new_scheduled_post_cols:
             if col_name not in scheduled_post_columns:
@@ -2870,7 +2882,11 @@ class WebDB:
         conn.close()
 
     def update_brand_api_field(self, brand_id, field, value):
-        allowed = {"ga4_property_id", "gsc_site_url", "meta_ad_account_id", "google_ads_customer_id", "wp_category_id", "facebook_page_id", "facebook_ads_page_id"}
+        allowed = {
+            "ga4_property_id", "gsc_site_url", "meta_ad_account_id", "google_ads_customer_id",
+            "wp_category_id", "facebook_page_id", "facebook_ads_page_id", "instagram_account_id",
+            "linkedin_organization_id", "nextdoor_business_url",
+        }
         if field not in allowed:
             raise ValueError(f"Cannot update field: {field}")
         conn = self._conn()
@@ -6270,15 +6286,18 @@ class WebDB:
     # ── Scheduled Posts ─────────────────────────────────────────────
 
     def save_scheduled_post(self, brand_id, platform, message, scheduled_at,
-                            image_url="", link_url="", post_type="", first_comment=""):
+                            image_url="", link_url="", post_type="", first_comment="",
+                            scheduled_at_utc="", platform_metadata="{}"):
         conn = self._conn()
         conn.execute(
             """INSERT INTO scheduled_posts
-               (brand_id, platform, post_type, message, first_comment, first_comment_status, image_url, link_url, scheduled_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+               (brand_id, platform, post_type, message, first_comment, first_comment_status,
+                image_url, link_url, scheduled_at, scheduled_at_utc, platform_metadata)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 brand_id, platform, post_type, message, first_comment,
                 "pending" if first_comment else "", image_url, link_url, scheduled_at,
+                scheduled_at_utc, platform_metadata or "{}",
             ),
         )
         conn.commit()
@@ -6293,11 +6312,13 @@ class WebDB:
         for p in posts:
             conn.execute(
                 """INSERT INTO scheduled_posts
-                   (brand_id, platform, post_type, message, first_comment, first_comment_status, image_url, link_url, scheduled_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                   (brand_id, platform, post_type, message, first_comment, first_comment_status,
+                    image_url, link_url, scheduled_at, scheduled_at_utc, platform_metadata)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (p["brand_id"], p.get("platform", "facebook"), p.get("post_type", ""), p["message"],
                  p.get("first_comment", ""), "pending" if p.get("first_comment") else "",
-                 p.get("image_url", ""), p.get("link_url", ""), p["scheduled_at"]),
+                 p.get("image_url", ""), p.get("link_url", ""), p["scheduled_at"],
+                 p.get("scheduled_at_utc", ""), p.get("platform_metadata", "{}") or "{}"),
             )
         conn.commit()
         conn.close()
@@ -6323,18 +6344,38 @@ class WebDB:
         conn.close()
         return dict(row) if row else None
 
-    def update_scheduled_post_status(self, post_id, status, fb_post_id="", error_message=""):
+    def get_due_social_posts(self, limit=50):
+        conn = self._conn()
+        rows = conn.execute(
+            """SELECT * FROM scheduled_posts
+               WHERE status = 'queued'
+                 AND platform IN ('instagram')
+                 AND COALESCE(scheduled_at_utc, '') != ''
+                 AND scheduled_at_utc <= datetime('now')
+               ORDER BY scheduled_at_utc ASC
+               LIMIT ?""",
+            (limit,),
+        ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    def update_scheduled_post_status(self, post_id, status, fb_post_id="", error_message="", external_post_id=""):
         conn = self._conn()
         if status == "published":
             conn.execute(
-                """UPDATE scheduled_posts SET status = ?, fb_post_id = ?,
+                """UPDATE scheduled_posts SET status = ?, fb_post_id = ?, external_post_id = ?,
                    published_at = datetime('now') WHERE id = ?""",
-                (status, fb_post_id, post_id),
+                (status, fb_post_id, external_post_id or fb_post_id, post_id),
             )
         elif status == "failed":
             conn.execute(
                 "UPDATE scheduled_posts SET status = ?, error_message = ? WHERE id = ?",
                 (status, error_message, post_id),
+            )
+        elif fb_post_id or external_post_id:
+            conn.execute(
+                "UPDATE scheduled_posts SET status = ?, fb_post_id = ?, external_post_id = ? WHERE id = ?",
+                (status, fb_post_id, external_post_id or fb_post_id, post_id),
             )
         else:
             conn.execute(
