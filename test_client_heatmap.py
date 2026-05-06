@@ -74,6 +74,7 @@ class ClientHeatmapTests(unittest.TestCase):
         self.assertIn("Use business location", html)
         self.assertIn("Run Heatmap", html)
         self.assertIn("Estimated Google Maps lookups", html)
+        self.assertIn("Weekly scheduled scans", html)
 
     def test_heatmap_api_bootstrap_returns_brand_and_active_scan(self):
         with self.app.app_context():
@@ -243,6 +244,88 @@ class ClientHeatmapTests(unittest.TestCase):
             saved_scan = self.app.db.get_heatmap_scan(payload["scan_id"])
 
         self.assertEqual(saved_scan["status"], "pending")
+
+    def test_heatmap_schedule_route_saves_weekly_keywords(self):
+        with self.app.app_context():
+            self.app.db.update_brand_text_field(self.brand_id, "google_place_id", "place-123")
+
+        response = self.client.post(
+            "/client/heatmap/schedules",
+            data={
+                "keywords": "pet waste removal\npooper scooper\nnear me dog poop cleanup",
+                "radius_miles": "10",
+                "grid_size": "7",
+                "day_of_week": "2",
+                "run_time": "09:30",
+                "timezone": "America/Phoenix",
+                "provider_preference": "local_falcon",
+            },
+            follow_redirects=False,
+        )
+
+        self.assertEqual(response.status_code, 302)
+        with self.app.app_context():
+            schedules = self.app.db.get_heatmap_schedules(self.brand_id)
+
+        self.assertEqual(len(schedules), 3)
+        self.assertEqual(schedules[0]["grid_size"], 7)
+        self.assertEqual(schedules[0]["radius_miles"], 10)
+        self.assertEqual(schedules[0]["day_of_week"], 2)
+        self.assertEqual(schedules[0]["run_time"], "09:30")
+        self.assertEqual(schedules[0]["provider_preference"], "local_falcon")
+        self.assertTrue(schedules[0]["next_run_at"])
+        self.assertIn("dog poop cleanup", [schedule["keyword"] for schedule in schedules])
+
+    @patch("webapp.heatmap.scan_grid_google_rank_only")
+    @patch("webapp.heatmap.verify_place_id")
+    @patch("webapp.heatmap.calc_search_radius_m")
+    @patch("webapp.heatmap.generate_grid")
+    @patch("webapp.heatmap.clean_keyword")
+    def test_heatmap_runner_processes_due_schedule(
+        self,
+        mock_clean_keyword,
+        mock_generate_grid,
+        mock_calc_search_radius_m,
+        mock_verify_place_id,
+        mock_scan_grid,
+    ):
+        mock_clean_keyword.return_value = ("pet waste removal", False)
+        mock_generate_grid.return_value = [{"row": 0, "col": 0, "lat": 33.4484, "lng": -112.0740}]
+        mock_calc_search_radius_m.return_value = 5000
+        mock_verify_place_id.return_value = {"name": "Heatmap Test Brand"}
+        mock_scan_grid.return_value = (
+            [{"row": 0, "col": 0, "lat": 33.4484, "lng": -112.0740, "rank": 3, "competitors": []}],
+            {"rank_provider": "google_rank_only"},
+        )
+
+        with self.app.app_context():
+            self.app.db.update_brand_text_field(self.brand_id, "google_place_id", "place-123")
+            self.app.db.replace_heatmap_schedules(self.brand_id, [{
+                "keyword": "pet waste removal",
+                "grid_size": 3,
+                "radius_miles": 5,
+                "center_lat": 33.4484,
+                "center_lng": -112.0740,
+                "provider_preference": "google",
+                "day_of_week": 0,
+                "run_time": "08:00",
+                "timezone": "America/Phoenix",
+                "enabled": True,
+                "next_run_at": "2000-01-01 00:00:00",
+            }])
+
+            from webapp.heatmap_runner import process_due_heatmap_schedules
+
+            stats = process_due_heatmap_schedules(self.app, limit=5)
+            schedules = self.app.db.get_heatmap_schedules(self.brand_id)
+            scans = self.app.db.get_heatmap_scans(self.brand_id, limit=5)
+
+        self.assertEqual(stats["complete"], 1)
+        self.assertEqual(schedules[0]["last_status"], "complete")
+        self.assertEqual(schedules[0]["last_scan_id"], scans[0]["id"])
+        self.assertEqual(scans[0]["status"], "complete")
+        self.assertEqual(scans[0]["avg_rank"], 3)
+        mock_scan_grid.assert_called_once()
 
     @patch("webapp.heatmap.scan_grid_google_rank_only")
     @patch("webapp.heatmap.verify_place_id")

@@ -36,6 +36,7 @@ from webapp.client_portal import client_bp, client_public_bp
 from webapp.hiring import hiring_bp
 from webapp.warren_webhooks import webhooks_bp
 from webapp.appointment_runner import start_background_appointment_runner
+from webapp.heatmap_runner import start_background_heatmap_runner
 from webapp.social_post_runner import start_background_social_post_runner
 
 BASE_DIR = Path(__file__).parent.parent
@@ -5985,6 +5986,7 @@ def create_app():
 
     if on_render:
         start_background_appointment_runner(app)
+        start_background_heatmap_runner(app)
         start_background_social_post_runner(app)
 
     return app

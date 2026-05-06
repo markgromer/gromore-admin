@@ -237,14 +237,8 @@
     <button type="button" class="settings-quick-link" data-panel-target="warren" data-panel-label="OpenPhone + Webhooks" data-help-href="{{ url_for('client.client_help', guide='warren') }}">
         <i class="bi bi-phone"></i> OpenPhone SMS
     </button>
-    <button type="button" class="settings-quick-link" data-panel-target="sng" data-panel-label="Sweep and Go" data-help-href="{{ url_for('client.client_help', guide='connections') }}#crm-sng">
-        <i class="bi bi-recycle"></i> Sweep and Go
-    </button>
-    <button type="button" class="settings-quick-link" data-panel-target="jobber" data-panel-label="Jobber" data-help-href="{{ url_for('client.client_help', guide='connections') }}#crm-jobber">
-        <i class="bi bi-briefcase"></i> Jobber
-    </button>
-    <button type="button" class="settings-quick-link" data-panel-target="razorsync" data-panel-label="RazorSync">
-        <i class="bi bi-truck"></i> RazorSync
+    <button type="button" class="settings-quick-link" data-panel-target="crm" data-panel-label="CRM Folder" data-help-href="{{ url_for('client.client_help', guide='connections') }}#crm">
+        <i class="bi bi-folder2-open"></i> CRM Folder
     </button>
     <button type="button" class="settings-quick-link" data-panel-target="payments" data-panel-label="Payments">
         <i class="bi bi-credit-card-2-front"></i> Stripe / Square
@@ -305,44 +299,14 @@
         <div class="connection-summary-power">Powers: reminders, outreach, lead emails</div>
     </button>
 
-    <button type="button" class="connection-summary-card" data-panel-target="sng" data-panel-label="Sweep and Go" data-help-href="{{ url_for('client.client_help', guide='connections') }}#crm-sng">
-        <span class="connection-summary-icon" style="background:linear-gradient(135deg,#059669,#10b981);"><i class="bi bi-recycle"></i></span>
+    <button type="button" class="connection-summary-card" data-panel-target="crm" data-panel-label="CRM Folder" data-help-href="{{ url_for('client.client_help', guide='connections') }}#crm">
+        <span class="connection-summary-icon" style="background:linear-gradient(135deg,#059669,#2563eb);"><i class="bi bi-folder2-open"></i></span>
         <div class="connection-summary-label">
-            <strong>Sweep and Go</strong>
-            {% if brand.crm_type == 'sweepandgo' and brand.crm_api_key %}<span class="badge bg-success">Connected</span>{% else %}<span class="badge bg-secondary">Not connected</span>{% endif %}
+            <strong>CRM</strong>
+            {% if brand.crm_type and brand.crm_api_key %}<span class="badge bg-success">Connected</span>{% else %}<span class="badge bg-secondary">Not connected</span>{% endif %}
         </div>
-        <div class="connection-summary-meta">CRM and revenue data connection, plus the webhook endpoint that feeds Warren live SNG events.</div>
-        <div class="connection-summary-power">Powers: client sync, revenue, inbound CRM events</div>
-    </button>
-
-    <button type="button" class="connection-summary-card" data-panel-target="ghl" data-panel-label="GoHighLevel" data-help-href="{{ url_for('client.client_help', guide='connections') }}#crm-ghl">
-        <span class="connection-summary-icon" style="background:linear-gradient(135deg,#f97316,#fb923c);"><i class="bi bi-lightning-charge-fill"></i></span>
-        <div class="connection-summary-label">
-            <strong>GoHighLevel</strong>
-            {% if brand.crm_type == 'gohighlevel' and brand.crm_api_key %}<span class="badge bg-success">Connected</span>{% else %}<span class="badge bg-secondary">Not connected</span>{% endif %}
-        </div>
-        <div class="connection-summary-meta">Alternative CRM connection for pipeline revenue, lead pushing, and sub-account reporting.</div>
-        <div class="connection-summary-power">Powers: pipeline sync, lead push</div>
-    </button>
-
-    <button type="button" class="connection-summary-card" data-panel-target="jobber" data-panel-label="Jobber" data-help-href="{{ url_for('client.client_help', guide='connections') }}#crm-jobber">
-        <span class="connection-summary-icon" style="background:linear-gradient(135deg,#0f766e,#38bdf8);"><i class="bi bi-briefcase-fill"></i></span>
-        <div class="connection-summary-label">
-            <strong>Jobber</strong>
-            {% if brand.crm_type == 'jobber' and brand.crm_api_key %}<span class="badge bg-success">Connected</span>{% else %}<span class="badge bg-secondary">Not connected</span>{% endif %}
-        </div>
-        <div class="connection-summary-meta">Field-service CRM connection for revenue sync and pushing booked Warren leads into Jobber.</div>
-        <div class="connection-summary-power">Powers: client creation, requests, revenue</div>
-    </button>
-
-    <button type="button" class="connection-summary-card" data-panel-target="razorsync" data-panel-label="RazorSync">
-        <span class="connection-summary-icon" style="background:linear-gradient(135deg,#2563eb,#14b8a6);"><i class="bi bi-truck"></i></span>
-        <div class="connection-summary-label">
-            <strong>RazorSync</strong>
-            {% if brand.crm_type == 'razorsync' and brand.crm_api_key %}<span class="badge bg-success">Connected</span>{% else %}<span class="badge bg-secondary">Not connected</span>{% endif %}
-        </div>
-        <div class="connection-summary-meta">Field-service CRM connection for pushing Warren leads and syncing paid work back into revenue reporting.</div>
-        <div class="connection-summary-power">Powers: lead push, CRM revenue</div>
+        <div class="connection-summary-meta">One folder for Sweep and Go, GoHighLevel, Jobber, RazorSync, and other CRM revenue or lead-push connections.</div>
+        <div class="connection-summary-power">Powers: client sync, revenue, lead push, CRM events</div>
     </button>
 
     <button type="button" class="connection-summary-card" data-panel-target="payments" data-panel-label="Payments">
@@ -755,6 +719,47 @@
                         <span class="text-muted" style="font-size:.85rem;">To send from their actual domain later, connect a verified SMTP/domain sending service.</span>
                     </div>
                 </form>
+            </div>
+        </div>
+    </section>
+
+    <section class="connection-panel" data-panel="crm" id="connection-panel-crm">
+        <div class="connection-panel-shell card">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
+                    <div>
+                        <h5 class="fw-semibold mb-1">CRM Folder</h5>
+                        <p class="text-muted mb-0">Choose the CRM or field-service system that should power Warren revenue sync, lead push, and event handling.</p>
+                    </div>
+                    {% if brand.crm_type and brand.crm_api_key %}<span class="badge bg-success rounded-pill px-3 py-2">CRM connected</span>{% else %}<span class="badge bg-secondary rounded-pill px-3 py-2">No CRM connected</span>{% endif %}
+                </div>
+                <div class="connection-readiness-grid mt-3">
+                    <button type="button" class="connection-readiness-card text-start" data-panel-target="sng" data-panel-label="Sweep and Go" data-help-href="{{ url_for('client.client_help', guide='connections') }}#crm-sng">
+                        <div class="fw-semibold mb-1"><i class="bi bi-recycle me-1"></i>Sweep and Go</div>
+                        <div class="text-muted" style="font-size:.82rem;">API token, organization slug, and live SNG webhook URL.</div>
+                        {% if brand.crm_type == 'sweepandgo' and brand.crm_api_key %}<span class="badge bg-success mt-2">Connected</span>{% else %}<span class="badge bg-secondary mt-2">Not connected</span>{% endif %}
+                    </button>
+                    <button type="button" class="connection-readiness-card text-start" data-panel-target="ghl" data-panel-label="GoHighLevel" data-help-href="{{ url_for('client.client_help', guide='connections') }}#crm-ghl">
+                        <div class="fw-semibold mb-1"><i class="bi bi-lightning-charge me-1"></i>GoHighLevel</div>
+                        <div class="text-muted" style="font-size:.82rem;">Pipeline reads and lead push into a GHL sub-account.</div>
+                        {% if brand.crm_type == 'gohighlevel' and brand.crm_api_key %}<span class="badge bg-success mt-2">Connected</span>{% else %}<span class="badge bg-secondary mt-2">Not connected</span>{% endif %}
+                    </button>
+                    <button type="button" class="connection-readiness-card text-start" data-panel-target="jobber" data-panel-label="Jobber" data-help-href="{{ url_for('client.client_help', guide='connections') }}#crm-jobber">
+                        <div class="fw-semibold mb-1"><i class="bi bi-briefcase me-1"></i>Jobber</div>
+                        <div class="text-muted" style="font-size:.82rem;">Field-service client creation, requests, and revenue sync.</div>
+                        {% if brand.crm_type == 'jobber' and brand.crm_api_key %}<span class="badge bg-success mt-2">Connected</span>{% else %}<span class="badge bg-secondary mt-2">Not connected</span>{% endif %}
+                    </button>
+                    <button type="button" class="connection-readiness-card text-start" data-panel-target="razorsync" data-panel-label="RazorSync">
+                        <div class="fw-semibold mb-1"><i class="bi bi-truck me-1"></i>RazorSync</div>
+                        <div class="text-muted" style="font-size:.82rem;">Lead push and paid-work sync for RazorSync accounts.</div>
+                        {% if brand.crm_type == 'razorsync' and brand.crm_api_key %}<span class="badge bg-success mt-2">Connected</span>{% else %}<span class="badge bg-secondary mt-2">Not connected</span>{% endif %}
+                    </button>
+                    <button type="button" class="connection-readiness-card text-start" data-panel-target="integration-hub" data-panel-label="Integration Hub">
+                        <div class="fw-semibold mb-1"><i class="bi bi-grid-3x3-gap me-1"></i>Other CRMs</div>
+                        <div class="text-muted" style="font-size:.82rem;">Housecall Pro, ServiceTitan, accounting, call tracking, and niche systems.</div>
+                        {% if integration_connected_count %}<span class="badge bg-success mt-2">{{ integration_connected_count }} configured</span>{% else %}<span class="badge bg-secondary mt-2">Ready</span>{% endif %}
+                    </button>
+                </div>
             </div>
         </div>
     </section>

@@ -23,6 +23,10 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import urlencode, urlparse, urljoin, quote_plus
 from itsdangerous import BadSignature, URLSafeTimedSerializer
+try:
+    from zoneinfo import ZoneInfo
+except Exception:
+    ZoneInfo = None
 
 from flask import (
     Blueprint, render_template, request, redirect,
@@ -5660,6 +5664,148 @@ def _load_heatmap_state(db, brand_id, scan_limit=20):
     scans = db.get_heatmap_scans(brand_id, limit=scan_limit)
     active_scan = _serialize_heatmap_scan(scans[0], include_results=True) if scans else None
     return brand, scans, active_scan
+
+
+def _next_heatmap_run_at(day_of_week, run_time, timezone_name, now_utc=None):
+    try:
+        day_of_week = max(0, min(6, int(day_of_week)))
+    except (TypeError, ValueError):
+        day_of_week = 0
+
+    run_time = (run_time or "08:00").strip()
+    if not re.match(r"^\d{2}:\d{2}$", run_time):
+        run_time = "08:00"
+    hour, minute = [int(part) for part in run_time.split(":", 1)]
+    hour = max(0, min(23, hour))
+    minute = max(0, min(59, minute))
+
+    tz = timezone.utc
+    if ZoneInfo:
+        try:
+            tz = ZoneInfo(timezone_name or "America/Phoenix")
+        except Exception:
+            tz = ZoneInfo("America/Phoenix")
+
+    now_utc = now_utc or datetime.now(timezone.utc)
+    now_local = now_utc.astimezone(tz)
+    days_ahead = (day_of_week - now_local.weekday()) % 7
+    candidate = (now_local + timedelta(days=days_ahead)).replace(
+        hour=hour,
+        minute=minute,
+        second=0,
+        microsecond=0,
+    )
+    if candidate <= now_local:
+        candidate += timedelta(days=7)
+    return candidate.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+
+
+def _prepare_heatmap_scan_kwargs(db, brand, *, keyword, radius_miles=5, grid_size=5,
+                                 center_lat=None, center_lng=None, provider_preference="auto"):
+    if not brand:
+        return None, "Brand not found"
+    brand = _hydrate_heatmap_brand(db, brand)
+
+    try:
+        radius = float(radius_miles or 5)
+    except (TypeError, ValueError):
+        radius = 5.0
+    radius = max(1.0, min(50.0, radius))
+
+    try:
+        grid_size = int(grid_size or 5)
+    except (TypeError, ValueError):
+        grid_size = 5
+    grid_size = max(3, min(10, grid_size))
+
+    keyword = (keyword or "").strip()
+    if not keyword:
+        return None, "Keyword is required"
+
+    api_key = _resolve_brand_maps_api_key(db, brand)
+    if not api_key:
+        return None, "Google Maps API key not configured. Add it in Connections."
+
+    business_lat = float(brand.get("business_lat") or 0)
+    business_lng = float(brand.get("business_lng") or 0)
+    if business_lat == 0 and business_lng == 0:
+        return None, "Business location not set. Set your address on the heatmap page first."
+
+    try:
+        scan_center_lat = float(center_lat) if center_lat is not None else business_lat
+        scan_center_lng = float(center_lng) if center_lng is not None else business_lng
+    except (TypeError, ValueError):
+        return None, "Scan center coordinates are invalid."
+
+    if not (-90 <= scan_center_lat <= 90) or not (-180 <= scan_center_lng <= 180):
+        return None, "Scan center coordinates are out of range."
+
+    from webapp.heatmap import generate_grid, calc_search_radius_m, verify_place_id, clean_keyword
+
+    grid_points = generate_grid(scan_center_lat, scan_center_lng, radius, grid_size)
+    search_radius = calc_search_radius_m(radius, grid_size)
+    business_name = brand.get("display_name", "")
+    place_id = brand.get("google_place_id") or None
+    if not place_id:
+        return None, "Google Place ID is required for rank-only heatmap scans. Link the correct listing first."
+
+    keyword, keyword_was_cleaned = clean_keyword(keyword)
+
+    place_verification = verify_place_id(api_key, place_id)
+    alternate_names = []
+    verified_name = ((place_verification or {}).get("name") or "").strip()
+    if verified_name and verified_name.lower() != business_name.lower().strip():
+        alternate_names.append(verified_name)
+    if not business_name and verified_name:
+        business_name = verified_name
+
+    listing_names = [business_name, *alternate_names]
+    keyword_brand_query = False
+    kw_lower = keyword.lower().strip()
+    for listing_name in listing_names:
+        normalized_listing_name = (listing_name or "").lower().strip()
+        if normalized_listing_name and (kw_lower == normalized_listing_name or kw_lower in normalized_listing_name or normalized_listing_name in kw_lower):
+            keyword_brand_query = True
+            break
+
+    keyword_warning = None
+    bn_lower = business_name.lower().strip()
+    if bn_lower and (kw_lower == bn_lower or kw_lower in bn_lower or bn_lower in kw_lower):
+        keyword_warning = (
+            "You searched your business name. The heatmap is designed for "
+            "service keywords, the terms customers use to find businesses like yours. "
+            "Try keywords like \"pooper scooper\", \"dog poop cleanup\", etc. "
+            "That shows where you rank vs. competitors when people search for your service."
+        )
+
+    provider_preference = (provider_preference or "auto").strip().lower()
+    if provider_preference not in {"auto", "google", "local_falcon"}:
+        provider_preference = "auto"
+    local_falcon_api_key = ""
+    if provider_preference in {"auto", "local_falcon"}:
+        local_falcon_api_key = _resolve_local_falcon_api_key(db, brand)
+
+    return {
+        "keyword": keyword,
+        "api_key": api_key,
+        "local_falcon_api_key": local_falcon_api_key,
+        "business_name": business_name,
+        "grid_points": grid_points,
+        "place_id": place_id,
+        "target_place_ids": [place_id] if place_id else [],
+        "search_radius": search_radius,
+        "grid_size": grid_size,
+        "radius_miles": radius,
+        "center_lat": scan_center_lat,
+        "center_lng": scan_center_lng,
+        "alternate_names": alternate_names,
+        "brand_query": keyword_brand_query,
+        "place_verification": place_verification,
+        "business_lat": business_lat,
+        "business_lng": business_lng,
+        "keyword_warning": keyword_warning,
+        "keyword_was_cleaned": keyword_was_cleaned,
+    }, None
 
 
 @client_bp.route("/api/heatmap")
@@ -13873,11 +14019,14 @@ def client_heatmap():
     brand, scans, active_scan = _load_heatmap_state(db, brand_id)
     if not brand:
         abort(404)
+    schedules = db.get_heatmap_schedules(brand_id)
     return render_template(
         "client_heatmap.html",
         brand=brand,
         scans=scans,
         active_scan=active_scan,
+        schedules=schedules,
+        local_falcon_configured=bool(_resolve_local_falcon_api_key(db, brand)),
         brand_name=session.get("client_brand_name", brand.get("display_name", "")),
     )
 
@@ -13890,103 +14039,27 @@ def client_heatmap_scan():
     brand = db.get_brand(brand_id)
     if not brand:
         return jsonify(ok=False, error="Brand not found"), 404
-    brand = _hydrate_heatmap_brand(db, brand)
 
     data = request.get_json(silent=True) or {}
-    keyword = (data.get("keyword") or "").strip()
-    radius = float(data.get("radius_miles") or 5)
-    grid_size = int(data.get("grid_size") or 6)
-    if grid_size < 3:
-        grid_size = 3
-    if grid_size > 10:
-        grid_size = 10
+    scan_kwargs, error = _prepare_heatmap_scan_kwargs(
+        db,
+        brand,
+        keyword=data.get("keyword"),
+        radius_miles=data.get("radius_miles") or 5,
+        grid_size=data.get("grid_size") or 6,
+        center_lat=data.get("center_lat"),
+        center_lng=data.get("center_lng"),
+        provider_preference=data.get("provider_preference") or "auto",
+    )
+    if error:
+        return jsonify(ok=False, error=error), 400
 
-    if not keyword:
-        return jsonify(ok=False, error="Keyword is required"), 400
-
-    api_key = _resolve_brand_maps_api_key(db, brand)
-    if not api_key:
-        return jsonify(ok=False, error="Google Maps API key not configured. Add it in Connections."), 400
-
-    business_lat = float(brand.get("business_lat") or 0)
-    business_lng = float(brand.get("business_lng") or 0)
-    if business_lat == 0 and business_lng == 0:
-        return jsonify(ok=False, error="Business location not set. Set your address on the heatmap page first."), 400
-
-    center_lat_raw = data.get("center_lat")
-    center_lng_raw = data.get("center_lng")
-    try:
-        scan_center_lat = float(center_lat_raw) if center_lat_raw is not None else business_lat
-        scan_center_lng = float(center_lng_raw) if center_lng_raw is not None else business_lng
-    except (TypeError, ValueError):
-        return jsonify(ok=False, error="Scan center coordinates are invalid."), 400
-
-    if not (-90 <= scan_center_lat <= 90) or not (-180 <= scan_center_lng <= 180):
-        return jsonify(ok=False, error="Scan center coordinates are out of range."), 400
-
-    from webapp.heatmap import generate_grid, calc_search_radius_m, verify_place_id, clean_keyword
-    grid_points = generate_grid(scan_center_lat, scan_center_lng, radius, grid_size)
-    search_radius = calc_search_radius_m(radius, grid_size)
-    business_name = brand.get("display_name", "")
-    place_id = brand.get("google_place_id") or None
-    if not place_id:
-        return jsonify(ok=False, error="Google Place ID is required for rank-only heatmap scans. Link the correct listing first."), 400
-
-    # Strip "near me" / "nearby" etc - the API already gets lat/lng + radius
-    keyword, keyword_was_cleaned = clean_keyword(keyword)
-
-    # Verify the Place ID resolves correctly
-    place_verification = None
-    if place_id:
-        place_verification = verify_place_id(api_key, place_id)
-
-    alternate_names = []
-    verified_name = ((place_verification or {}).get("name") or "").strip()
-    if verified_name and verified_name.lower() != business_name.lower().strip():
-        alternate_names.append(verified_name)
-    if not business_name and verified_name:
-        business_name = verified_name
-
-    listing_names = [business_name, *alternate_names]
-    keyword_brand_query = False
-    kw_lower = keyword.lower().strip()
-    for listing_name in listing_names:
-        normalized_listing_name = (listing_name or "").lower().strip()
-        if normalized_listing_name and (kw_lower == normalized_listing_name or kw_lower in normalized_listing_name or normalized_listing_name in kw_lower):
-            keyword_brand_query = True
-            break
-
-    # Detect if keyword looks like the business name (common user mistake)
-    keyword_warning = None
-    bn_lower = business_name.lower().strip()
-    if bn_lower and (kw_lower == bn_lower or kw_lower in bn_lower or bn_lower in kw_lower):
-        keyword_warning = (
-            "You searched your business name. The heatmap is designed for "
-            "service keywords, the terms customers use to find businesses like yours. "
-            "Try keywords like \"pooper scooper\", \"dog poop cleanup\", etc. "
-            "That shows where you rank vs. competitors when people search for your service."
-        )
-    scan_kwargs = {
-        "keyword": keyword,
-        "api_key": api_key,
-        "local_falcon_api_key": _resolve_local_falcon_api_key(db, brand),
-        "business_name": business_name,
-        "grid_points": grid_points,
-        "place_id": place_id,
-        "target_place_ids": [place_id] if place_id else [],
-        "search_radius": search_radius,
-        "grid_size": grid_size,
-        "radius_miles": radius,
-        "center_lat": scan_center_lat,
-        "center_lng": scan_center_lng,
-        "alternate_names": alternate_names,
-        "brand_query": keyword_brand_query,
-        "place_verification": place_verification,
-        "business_lat": business_lat,
-        "business_lng": business_lng,
-        "keyword_warning": keyword_warning,
-        "keyword_was_cleaned": keyword_was_cleaned,
-    }
+    keyword = scan_kwargs["keyword"]
+    grid_size = scan_kwargs["grid_size"]
+    radius = scan_kwargs["radius_miles"]
+    scan_center_lat = scan_kwargs["center_lat"]
+    scan_center_lng = scan_kwargs["center_lng"]
+    grid_points = scan_kwargs["grid_points"]
 
     if len(grid_points) > _HEATMAP_ASYNC_POINT_THRESHOLD:
         scan_id = db.save_heatmap_scan(
@@ -14040,6 +14113,88 @@ def client_heatmap_scan():
         center_lng=scan_center_lng,
         debug=payload["debug"],
     )
+
+
+@client_bp.route("/heatmap/schedules", methods=["POST"])
+@client_login_required
+def client_heatmap_schedules():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        abort(404)
+    brand = _hydrate_heatmap_brand(db, brand)
+
+    from webapp.heatmap import clean_keyword
+
+    raw_keywords = request.form.get("keywords") or ""
+    keywords = []
+    seen = set()
+    for part in re.split(r"[\n,]+", raw_keywords):
+        keyword = (part or "").strip()
+        if not keyword:
+            continue
+        keyword, _ = clean_keyword(keyword)
+        normalized = keyword.lower()
+        if normalized and normalized not in seen:
+            keywords.append(keyword)
+            seen.add(normalized)
+        if len(keywords) >= 12:
+            break
+
+    try:
+        radius_miles = max(1.0, min(50.0, float(request.form.get("radius_miles") or 5)))
+    except (TypeError, ValueError):
+        radius_miles = 5.0
+    try:
+        grid_size = max(3, min(10, int(request.form.get("grid_size") or 5)))
+    except (TypeError, ValueError):
+        grid_size = 5
+    try:
+        day_of_week = max(0, min(6, int(request.form.get("day_of_week") or 0)))
+    except (TypeError, ValueError):
+        day_of_week = 0
+
+    run_time = (request.form.get("run_time") or "08:00").strip()
+    if not re.match(r"^\d{2}:\d{2}$", run_time):
+        run_time = "08:00"
+    timezone_name = (request.form.get("timezone") or brand.get("sales_bot_appointment_reminder_timezone") or "America/Phoenix").strip()
+    provider_preference = (request.form.get("provider_preference") or "google").strip().lower()
+    if provider_preference not in {"google", "local_falcon", "auto"}:
+        provider_preference = "google"
+
+    business_lat = float(brand.get("business_lat") or 0)
+    business_lng = float(brand.get("business_lng") or 0)
+    if keywords and business_lat == 0 and business_lng == 0:
+        flash("Set the business location before scheduling heatmap scans.", "warning")
+        return redirect(url_for("client.client_heatmap"))
+    if keywords and not (brand.get("google_place_id") or "").strip():
+        flash("Link the Google Place ID before scheduling heatmap scans.", "warning")
+        return redirect(url_for("client.client_heatmap"))
+
+    next_run_at = _next_heatmap_run_at(day_of_week, run_time, timezone_name)
+    schedules = [
+        {
+            "keyword": keyword,
+            "grid_size": grid_size,
+            "radius_miles": radius_miles,
+            "center_lat": business_lat,
+            "center_lng": business_lng,
+            "provider_preference": provider_preference,
+            "day_of_week": day_of_week,
+            "run_time": run_time,
+            "timezone": timezone_name,
+            "enabled": True,
+            "next_run_at": next_run_at,
+        }
+        for keyword in keywords
+    ]
+    db.replace_heatmap_schedules(brand_id, schedules)
+    if schedules:
+        flash(f"Weekly heatmap scans scheduled for {len(schedules)} keyword{'s' if len(schedules) != 1 else ''}.", "success")
+    else:
+        flash("Weekly heatmap scans cleared.", "success")
+    return redirect(url_for("client.client_heatmap"))
 
 
 @client_bp.route("/heatmap/test-api", methods=["POST"])

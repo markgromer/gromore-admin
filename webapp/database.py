@@ -692,6 +692,34 @@ class WebDB:
                 scanned_at TEXT DEFAULT (datetime('now')),
                 FOREIGN KEY (brand_id) REFERENCES brands(id) ON DELETE CASCADE
             );
+
+            CREATE TABLE IF NOT EXISTS heatmap_schedules (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                brand_id INTEGER NOT NULL,
+                keyword TEXT NOT NULL,
+                grid_size INTEGER DEFAULT 5,
+                radius_miles REAL DEFAULT 5.0,
+                center_lat REAL NOT NULL,
+                center_lng REAL NOT NULL,
+                provider_preference TEXT NOT NULL DEFAULT 'google',
+                day_of_week INTEGER NOT NULL DEFAULT 0,
+                run_time TEXT NOT NULL DEFAULT '08:00',
+                timezone TEXT NOT NULL DEFAULT 'America/Phoenix',
+                enabled INTEGER NOT NULL DEFAULT 1,
+                next_run_at TEXT NOT NULL DEFAULT '',
+                last_run_at TEXT NOT NULL DEFAULT '',
+                last_scan_id INTEGER DEFAULT NULL,
+                last_status TEXT NOT NULL DEFAULT '',
+                last_error TEXT NOT NULL DEFAULT '',
+                created_at TEXT DEFAULT (datetime('now')),
+                updated_at TEXT DEFAULT (datetime('now')),
+                UNIQUE(brand_id, keyword),
+                FOREIGN KEY (brand_id) REFERENCES brands(id) ON DELETE CASCADE,
+                FOREIGN KEY (last_scan_id) REFERENCES heatmap_scans(id) ON DELETE SET NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_heatmap_schedules_due
+            ON heatmap_schedules(enabled, next_run_at);
         """)
         conn.execute("""
             CREATE TABLE IF NOT EXISTS warren_memories (
@@ -5744,7 +5772,88 @@ class WebDB:
         conn.commit()
         conn.close()
 
-    # ── Warren Memories ──
+    # Heatmap Schedules
+
+    def replace_heatmap_schedules(self, brand_id, schedules):
+        conn = self._conn()
+        conn.execute("DELETE FROM heatmap_schedules WHERE brand_id = ?", (brand_id,))
+        for schedule in schedules:
+            conn.execute(
+                """INSERT INTO heatmap_schedules
+                   (brand_id, keyword, grid_size, radius_miles, center_lat, center_lng,
+                    provider_preference, day_of_week, run_time, timezone, enabled, next_run_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    brand_id,
+                    schedule.get("keyword", ""),
+                    int(schedule.get("grid_size") or 5),
+                    float(schedule.get("radius_miles") or 5),
+                    float(schedule.get("center_lat") or 0),
+                    float(schedule.get("center_lng") or 0),
+                    schedule.get("provider_preference") or "google",
+                    int(schedule.get("day_of_week") or 0),
+                    schedule.get("run_time") or "08:00",
+                    schedule.get("timezone") or "America/Phoenix",
+                    1 if schedule.get("enabled", True) else 0,
+                    schedule.get("next_run_at") or "",
+                ),
+            )
+        conn.commit()
+        conn.close()
+
+    def get_heatmap_schedules(self, brand_id):
+        conn = self._conn()
+        rows = conn.execute(
+            """SELECT * FROM heatmap_schedules
+               WHERE brand_id = ?
+               ORDER BY enabled DESC, keyword COLLATE NOCASE ASC""",
+            (brand_id,),
+        ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    def get_due_heatmap_schedules(self, now_iso=None, limit=20):
+        now_iso = now_iso or datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+        conn = self._conn()
+        rows = conn.execute(
+            """SELECT * FROM heatmap_schedules
+               WHERE enabled = 1
+                 AND next_run_at != ''
+                 AND next_run_at <= ?
+               ORDER BY next_run_at ASC
+               LIMIT ?""",
+            (now_iso, int(limit)),
+        ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    def update_heatmap_schedule_run(self, schedule_id, *, next_run_at=None, last_run_at=None,
+                                    last_scan_id=None, last_status=None, last_error=None):
+        fields = ["updated_at = datetime('now')"]
+        values = []
+        updates = {
+            "next_run_at": next_run_at,
+            "last_run_at": last_run_at,
+            "last_scan_id": last_scan_id,
+            "last_status": last_status,
+            "last_error": last_error,
+        }
+        for field_name, value in updates.items():
+            if value is not None:
+                fields.append(f"{field_name} = ?")
+                values.append(value)
+        if len(fields) == 1:
+            return
+
+        conn = self._conn()
+        conn.execute(
+            f"UPDATE heatmap_schedules SET {', '.join(fields)} WHERE id = ?",
+            (*values, schedule_id),
+        )
+        conn.commit()
+        conn.close()
+
+    # Warren Memories
 
     def add_warren_memory(self, brand_id, category, title, content, embedding=None):
         conn = self._conn()
