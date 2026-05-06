@@ -798,6 +798,8 @@ class WebDB:
                 foreground_color TEXT NOT NULL DEFAULT '#111827',
                 background_color TEXT NOT NULL DEFAULT '#ffffff',
                 frame_text TEXT NOT NULL DEFAULT '',
+                module_style TEXT NOT NULL DEFAULT 'rounded',
+                badge_shape TEXT NOT NULL DEFAULT 'none',
                 scans INTEGER NOT NULL DEFAULT 0,
                 last_scanned_at TEXT NOT NULL DEFAULT '',
                 active INTEGER NOT NULL DEFAULT 1,
@@ -2532,6 +2534,16 @@ class WebDB:
         conn.commit()
 
         # ── agent_findings migrations ──
+        qr_columns = {r[1] for r in conn.execute("PRAGMA table_info(qr_codes)").fetchall()}
+        new_qr_cols = [
+            ("module_style", "TEXT NOT NULL DEFAULT 'rounded'"),
+            ("badge_shape", "TEXT NOT NULL DEFAULT 'none'"),
+        ]
+        for col_name, col_def in new_qr_cols:
+            if col_name not in qr_columns:
+                self._safe_add_column(conn, "qr_codes", col_name, col_def)
+        conn.commit()
+
         af_columns = {r[1] for r in conn.execute("PRAGMA table_info(agent_findings)").fetchall()}
         new_af_cols = [
             ("status", "TEXT DEFAULT 'new'"),           # new|acknowledged|in_progress|done|dismissed
@@ -5500,13 +5512,14 @@ class WebDB:
 
     def create_qr_code(self, brand_id, name, target_url, tracking_slug,
                        foreground_color="#111827", background_color="#ffffff",
-                       frame_text="", created_by=""):
+                       frame_text="", module_style="rounded", badge_shape="none",
+                       created_by=""):
         conn = self._conn()
         conn.execute(
             """INSERT INTO qr_codes (
                    brand_id, name, target_url, tracking_slug, foreground_color,
-                   background_color, frame_text, created_by
-               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                   background_color, frame_text, module_style, badge_shape, created_by
+               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 brand_id,
                 name,
@@ -5515,6 +5528,8 @@ class WebDB:
                 foreground_color,
                 background_color,
                 frame_text,
+                module_style,
+                badge_shape,
                 created_by,
             ),
         )
@@ -5561,7 +5576,7 @@ class WebDB:
 
     def update_qr_code(self, qr_id, brand_id, *, name=None, target_url=None,
                        foreground_color=None, background_color=None, frame_text=None,
-                       active=None):
+                       module_style=None, badge_shape=None, active=None):
         fields = ["updated_at = datetime('now')"]
         values = []
         updates = {
@@ -5570,6 +5585,8 @@ class WebDB:
             "foreground_color": foreground_color,
             "background_color": background_color,
             "frame_text": frame_text,
+            "module_style": module_style,
+            "badge_shape": badge_shape,
             "active": active,
         }
         for field_name, value in updates.items():

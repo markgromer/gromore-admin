@@ -17,6 +17,7 @@ import secrets
 import zipfile
 import csv
 import hashlib
+import math
 import requests
 from io import BytesIO, StringIO
 from functools import wraps
@@ -8893,9 +8894,73 @@ def _hash_qr_ip(ip_value):
     return hashlib.sha256(f"{secret}:{ip_value or ''}".encode("utf-8")).hexdigest()[:32]
 
 
-def _render_branded_qr_png(qr_record, tracking_url, brand):
+_QR_MODULE_STYLES = {
+    "rounded": "Rounded",
+    "square": "Square",
+    "circle": "Dots",
+    "gapped": "Gapped",
+    "horizontal": "Horizontal Bars",
+    "vertical": "Vertical Bars",
+}
+
+_QR_BADGE_SHAPES = {
+    "none": "No Badge",
+    "paw": "Paw",
+    "bone": "Dog Bone",
+    "poop": "Poop",
+    "home": "House",
+    "star": "Star",
+    "heart": "Heart",
+    "wrench": "Tool",
+    "leaf": "Leaf",
+}
+
+
+def _normalize_qr_module_style(value):
+    value = (value or "rounded").strip().lower()
+    return value if value in _QR_MODULE_STYLES else "rounded"
+
+
+def _normalize_qr_badge_shape(value):
+    value = (value or "none").strip().lower()
+    return value if value in _QR_BADGE_SHAPES else "none"
+
+
+def _qr_style_choices():
+    return [{"key": key, "label": label} for key, label in _QR_MODULE_STYLES.items()]
+
+
+def _qr_badge_choices():
+    return [{"key": key, "label": label} for key, label in _QR_BADGE_SHAPES.items()]
+
+
+def _styled_qr_module_drawer(module_style):
+    from qrcode.image.styles.moduledrawers.pil import (
+        CircleModuleDrawer,
+        GappedSquareModuleDrawer,
+        HorizontalBarsDrawer,
+        RoundedModuleDrawer,
+        SquareModuleDrawer,
+        VerticalBarsDrawer,
+    )
+
+    module_style = _normalize_qr_module_style(module_style)
+    if module_style == "square":
+        return SquareModuleDrawer()
+    if module_style == "circle":
+        return CircleModuleDrawer()
+    if module_style == "gapped":
+        return GappedSquareModuleDrawer()
+    if module_style == "horizontal":
+        return HorizontalBarsDrawer()
+    if module_style == "vertical":
+        return VerticalBarsDrawer()
+    return RoundedModuleDrawer()
+
+
+def _make_styled_qr_image(qr_record, tracking_url, size):
     import qrcode
-    from PIL import Image, ImageDraw, ImageFont
+    from PIL import Image
 
     foreground = _normalize_qr_color(qr_record.get("foreground_color"), "#111827")
     background = _normalize_qr_color(qr_record.get("background_color"), "#ffffff")
@@ -8907,8 +8972,153 @@ def _render_branded_qr_png(qr_record, tracking_url, brand):
     )
     qr.add_data(tracking_url)
     qr.make(fit=True)
-    qr_img = qr.make_image(fill_color=foreground, back_color=background).convert("RGB")
-    qr_img = qr_img.resize((720, 720), Image.Resampling.NEAREST)
+    try:
+        from qrcode.image.styledpil import StyledPilImage
+
+        qr_img = qr.make_image(
+            image_factory=StyledPilImage,
+            module_drawer=_styled_qr_module_drawer(qr_record.get("module_style")),
+            fill_color=foreground,
+            back_color=background,
+        ).convert("RGB")
+    except Exception:
+        qr_img = qr.make_image(fill_color=foreground, back_color=background).convert("RGB")
+    return qr_img.resize((size, size), Image.Resampling.NEAREST)
+
+
+def _draw_qr_badge_icon(draw, shape, box, fill, accent):
+    left, top, right, bottom = box
+    width = right - left
+    height = bottom - top
+    cx = left + width / 2
+    cy = top + height / 2
+    shape = _normalize_qr_badge_shape(shape)
+    fill = _normalize_qr_color(fill, "#111827")
+    accent = _normalize_qr_color(accent, "#0f766e")
+
+    if shape == "paw":
+        toe_r = width * 0.11
+        for tx, ty in [
+            (cx - width * 0.24, top + height * 0.28),
+            (cx - width * 0.08, top + height * 0.18),
+            (cx + width * 0.08, top + height * 0.18),
+            (cx + width * 0.24, top + height * 0.28),
+        ]:
+            draw.ellipse((tx - toe_r, ty - toe_r, tx + toe_r, ty + toe_r), fill=fill)
+        draw.ellipse((cx - width * 0.28, cy - height * 0.04, cx + width * 0.28, cy + height * 0.36), fill=fill)
+        return
+
+    if shape == "bone":
+        draw.rounded_rectangle(
+            (left + width * 0.18, cy - height * 0.13, right - width * 0.18, cy + height * 0.13),
+            radius=int(width * 0.08),
+            fill=fill,
+        )
+        r = width * 0.16
+        for tx, ty in [
+            (left + width * 0.2, cy - height * 0.14),
+            (left + width * 0.2, cy + height * 0.14),
+            (right - width * 0.2, cy - height * 0.14),
+            (right - width * 0.2, cy + height * 0.14),
+        ]:
+            draw.ellipse((tx - r, ty - r, tx + r, ty + r), fill=fill)
+        return
+
+    if shape == "poop":
+        poop_fill = "#7c2d12"
+        draw.ellipse((left + width * 0.18, top + height * 0.56, right - width * 0.18, bottom - height * 0.08), fill=poop_fill)
+        draw.ellipse((left + width * 0.26, top + height * 0.36, right - width * 0.24, bottom - height * 0.26), fill=poop_fill)
+        draw.ellipse((left + width * 0.36, top + height * 0.18, right - width * 0.34, bottom - height * 0.48), fill=poop_fill)
+        draw.polygon(
+            [
+                (cx - width * 0.05, top + height * 0.12),
+                (cx + width * 0.16, top + height * 0.28),
+                (cx - width * 0.02, top + height * 0.34),
+            ],
+            fill=poop_fill,
+        )
+        return
+
+    if shape == "home":
+        draw.polygon(
+            [(cx, top + height * 0.15), (left + width * 0.16, cy), (right - width * 0.16, cy)],
+            fill=fill,
+        )
+        draw.rounded_rectangle(
+            (left + width * 0.26, cy - height * 0.02, right - width * 0.26, bottom - height * 0.14),
+            radius=int(width * 0.04),
+            fill=fill,
+        )
+        return
+
+    if shape == "star":
+        points = []
+        for i in range(10):
+            angle = -90 + i * 36
+            radius = width * (0.36 if i % 2 == 0 else 0.16)
+            x = cx + radius * math.cos(math.radians(angle))
+            y = cy + radius * math.sin(math.radians(angle))
+            points.append((x, y))
+        draw.polygon(points, fill=accent)
+        return
+
+    if shape == "heart":
+        draw.ellipse((left + width * 0.18, top + height * 0.18, cx + width * 0.04, cy + height * 0.1), fill=fill)
+        draw.ellipse((cx - width * 0.04, top + height * 0.18, right - width * 0.18, cy + height * 0.1), fill=fill)
+        draw.polygon(
+            [(left + width * 0.16, cy), (right - width * 0.16, cy), (cx, bottom - height * 0.14)],
+            fill=fill,
+        )
+        return
+
+    if shape == "wrench":
+        draw.line((left + width * 0.25, bottom - height * 0.22, right - width * 0.22, top + height * 0.25), fill=fill, width=max(8, int(width * 0.12)))
+        draw.ellipse((right - width * 0.35, top + height * 0.12, right - width * 0.08, top + height * 0.39), outline=fill, width=max(7, int(width * 0.08)))
+        draw.ellipse((left + width * 0.16, bottom - height * 0.32, left + width * 0.36, bottom - height * 0.12), fill=accent)
+        return
+
+    if shape == "leaf":
+        draw.ellipse((left + width * 0.2, top + height * 0.16, right - width * 0.16, bottom - height * 0.16), fill=accent)
+        draw.line((left + width * 0.32, bottom - height * 0.22, right - width * 0.25, top + height * 0.25), fill="#ffffff", width=max(4, int(width * 0.04)))
+
+
+def _apply_qr_badge(qr_img, qr_record, brand):
+    from PIL import ImageDraw
+
+    badge_shape = _normalize_qr_badge_shape(qr_record.get("badge_shape"))
+    if badge_shape == "none":
+        return qr_img
+
+    qr_img = qr_img.copy()
+    draw = ImageDraw.Draw(qr_img)
+    size = qr_img.width
+    badge_size = int(size * 0.19)
+    left = (size - badge_size) // 2
+    top = (size - badge_size) // 2
+    right = left + badge_size
+    bottom = top + badge_size
+    pad = max(10, int(size * 0.025))
+    foreground = _normalize_qr_color(qr_record.get("foreground_color"), "#111827")
+    accent = _normalize_qr_color((brand or {}).get("brand_primary_color") or foreground, foreground)
+
+    draw.rounded_rectangle(
+        (left - pad, top - pad, right + pad, bottom + pad),
+        radius=max(14, int(badge_size * 0.18)),
+        fill="#ffffff",
+        outline=accent,
+        width=max(4, int(size * 0.01)),
+    )
+    _draw_qr_badge_icon(draw, badge_shape, (left, top, right, bottom), foreground, accent)
+    return qr_img
+
+
+def _render_branded_qr_png(qr_record, tracking_url, brand):
+    from PIL import Image, ImageDraw, ImageFont
+
+    foreground = _normalize_qr_color(qr_record.get("foreground_color"), "#111827")
+    background = _normalize_qr_color(qr_record.get("background_color"), "#ffffff")
+    qr_img = _make_styled_qr_image(qr_record, tracking_url, 720)
+    qr_img = _apply_qr_badge(qr_img, qr_record, brand)
 
     canvas_w = 900
     canvas_h = 1060
@@ -9041,7 +9251,6 @@ def _clean_print_text(value, limit):
 
 
 def _render_print_material_png(material, brand, qr_record=None):
-    import qrcode
     from PIL import Image, ImageDraw, ImageFont
 
     template = _PRINT_MATERIAL_TEMPLATES.get(material.get("material_type")) or _PRINT_MATERIAL_TEMPLATES["postcard"]
@@ -9147,16 +9356,8 @@ def _render_print_material_png(material, brand, qr_record=None):
         draw.text((margin, footer_y + max(52, footer_h // 2)), contact[:120], font=font(max(18, int(canvas_h * 0.025))), fill="#d1d5db")
 
     if has_qr:
-        qr = qrcode.QRCode(
-            version=None,
-            error_correction=qrcode.constants.ERROR_CORRECT_H,
-            box_size=12,
-            border=3,
-        )
-        qr.add_data(_qr_tracking_url(qr_record["tracking_slug"]))
-        qr.make(fit=True)
-        qr_img = qr.make_image(fill_color=primary, back_color="#ffffff").convert("RGB")
-        qr_img = qr_img.resize((qr_size, qr_size), Image.Resampling.NEAREST)
+        qr_img = _make_styled_qr_image(qr_record, _qr_tracking_url(qr_record["tracking_slug"]), qr_size)
+        qr_img = _apply_qr_badge(qr_img, qr_record, brand)
         qr_pad = max(18, qr_size // 11)
         qr_x = canvas_w - margin - qr_size - qr_pad
         qr_y = content_top
@@ -9194,10 +9395,16 @@ def client_qr_studio():
         item["tracking_url"] = _qr_tracking_url(item["tracking_slug"])
         item["scan_count"] = int(summary.get("scan_count") or item.get("scans") or 0)
         item["last_scanned_at"] = summary.get("last_scanned_at") or item.get("last_scanned_at") or ""
+        item["module_style"] = _normalize_qr_module_style(item.get("module_style"))
+        item["badge_shape"] = _normalize_qr_badge_shape(item.get("badge_shape"))
+        item["module_style_label"] = _QR_MODULE_STYLES.get(item["module_style"], "Rounded")
+        item["badge_shape_label"] = _QR_BADGE_SHAPES.get(item["badge_shape"], "No Badge")
     return render_template(
         "client_qr_studio.html",
         brand=brand,
         qr_codes=qr_codes,
+        module_styles=_qr_style_choices(),
+        badge_shapes=_qr_badge_choices(),
         brand_name=session.get("client_brand_name", brand.get("display_name", "")),
     )
 
@@ -9220,6 +9427,8 @@ def client_qr_studio_create():
     foreground = _normalize_qr_color(request.form.get("foreground_color"), (brand.get("brand_primary_color") or "#111827"))
     background = _normalize_qr_color(request.form.get("background_color"), "#ffffff")
     frame_text = (request.form.get("frame_text") or "").strip()[:80]
+    module_style = _normalize_qr_module_style(request.form.get("module_style"))
+    badge_shape = _normalize_qr_badge_shape(request.form.get("badge_shape"))
     created_by = session.get("client_user_email") or session.get("client_brand_name") or ""
     slug = _new_qr_tracking_slug(db)
     db.create_qr_code(
@@ -9230,6 +9439,8 @@ def client_qr_studio_create():
         foreground_color=foreground,
         background_color=background,
         frame_text=frame_text,
+        module_style=module_style,
+        badge_shape=badge_shape,
         created_by=created_by,
     )
     flash("Tracked QR code created.", "success")

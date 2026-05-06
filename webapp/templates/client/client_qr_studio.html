@@ -56,8 +56,29 @@
     font-size: .8rem;
     font-weight: 700;
 }
+.qr-style-row {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+}
+.qr-style-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border-radius: 999px;
+    background: #f1f5f9;
+    color: #334155;
+    padding: 5px 9px;
+    font-size: .76rem;
+    font-weight: 700;
+}
 @media (max-width: 991px) {
     .qr-studio-shell {
+        grid-template-columns: 1fr;
+    }
+}
+@media (max-width: 520px) {
+    .qr-style-row {
         grid-template-columns: 1fr;
     }
 }
@@ -102,6 +123,25 @@
                     <label class="form-label fw-medium">Frame Text</label>
                     <input class="form-control" name="frame_text" maxlength="80" placeholder="Scan for a free quote">
                 </div>
+                <div class="qr-style-row mt-3">
+                    <div>
+                        <label class="form-label fw-medium">QR Pattern</label>
+                        <select class="form-select" name="module_style">
+                            {% for style in module_styles %}
+                            <option value="{{ style.key }}" {% if style.key == 'rounded' %}selected{% endif %}>{{ style.label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="form-label fw-medium">Center Badge</label>
+                        <select class="form-select" name="badge_shape">
+                            {% for shape in badge_shapes %}
+                            <option value="{{ shape.key }}" {% if shape.key == 'none' %}selected{% endif %}>{{ shape.label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <small class="text-muted d-block mt-2">Badges stay small and centered so the QR remains scan-friendly.</small>
                 <button class="btn btn-primary w-100 mt-3" type="submit">
                     <i class="bi bi-plus-circle me-1"></i> Generate Tracked QR
                 </button>
@@ -135,6 +175,12 @@
                     <div class="mb-3">
                         <div class="text-muted" style="font-size:.78rem;">Destination</div>
                         <div class="qr-url">{{ qr.target_url }}</div>
+                    </div>
+                    <div class="d-flex flex-wrap gap-2 mb-3">
+                        <span class="qr-style-chip"><i class="bi bi-grid-3x3-gap"></i>{{ qr.module_style_label }}</span>
+                        {% if qr.badge_shape != 'none' %}
+                        <span class="qr-style-chip"><i class="bi bi-shapes"></i>{{ qr.badge_shape_label }}</span>
+                        {% endif %}
                     </div>
                     <div class="d-flex flex-wrap gap-2">
                         <a class="btn btn-sm btn-primary" href="{{ url_for('client.client_qr_studio_png', qr_id=qr.id, download=1) }}">
