@@ -64,9 +64,6 @@ class ClientQrStudioTests(unittest.TestCase):
                 "foreground_color": "#0f766e",
                 "background_color": "#ffffff",
                 "frame_text": "Scan for reviews",
-                "module_style": "circle",
-                "badge_shape": "monogram",
-                "frame_style": "side_callout",
             },
             follow_redirects=False,
         )
@@ -78,9 +75,9 @@ class ClientQrStudioTests(unittest.TestCase):
 
         self.assertEqual(qr["name"], "Review Card")
         self.assertEqual(qr["target_url"], "https://example.com/review")
-        self.assertEqual(qr["module_style"], "circle")
-        self.assertEqual(qr["badge_shape"], "monogram")
-        self.assertEqual(qr["frame_style"], "side_callout")
+        self.assertEqual(qr["module_style"], "square")
+        self.assertEqual(qr["badge_shape"], "none")
+        self.assertEqual(qr["frame_style"], "minimal")
 
         png_response = self.client.get(f"/client/qr-studio/{qr['id']}/png")
         self.assertEqual(png_response.status_code, 200)
