@@ -1409,7 +1409,7 @@
             <i class="bi bi-geo-alt" style="font-size:1.3rem; color:#ea4335;"></i>
             <h6 class="mb-0">Google Maps API</h6>
         </div>
-        <p class="text-muted mb-3" style="font-size:.88rem;">Required for the Local Rank Heatmap feature. Google runs cheap rank-only scans; Local Falcon is optional for full geo-grid ranking detail.</p>
+        <p class="text-muted mb-3" style="font-size:.88rem;">Required for the Local Rank Heatmap feature. Google runs cheap rank-only scans; Local Falcon is optional for saved geo-grid report retrieval.</p>
         <form action="{{ url_for('client.client_save_maps_api') }}" method="POST">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <div class="row g-3 align-items-end">

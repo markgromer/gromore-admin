@@ -25,6 +25,7 @@ BROWSER_SCROLL_PASSES = 2
 PLACES_REQUEST_TIMEOUT_SECONDS = 8
 SCAN_MAX_SECONDS = 240
 LOCAL_FALCON_SCAN_TIMEOUT_SECONDS = 300
+LOCAL_FALCON_REPORT_TIMEOUT_SECONDS = 30
 
 # Phrases that are redundant when we already pass lat/lng + radius to the API
 _LOCATION_NOISE = re.compile(
@@ -477,6 +478,149 @@ def _search_places(api_key, keyword, lat, lng, radius_m=2000, brand_query=False,
             return best_places, diag
 
     return all_places, diag
+
+
+def _local_falcon_post(path, api_key, payload=None, timeout=LOCAL_FALCON_REPORT_TIMEOUT_SECONDS):
+    payload = dict(payload or {})
+    payload["api_key"] = api_key
+    resp = requests.post(
+        f"https://api.localfalcon.com{path}",
+        data=payload,
+        timeout=timeout,
+    )
+    try:
+        data = resp.json()
+    except Exception as exc:
+        raise RuntimeError(f"Local Falcon returned non-JSON response HTTP {resp.status_code}: {resp.text[:200]}") from exc
+    if resp.status_code not in (200, 202) or not data.get("success"):
+        message = data.get("message") or data.get("code_desc") or resp.text[:200]
+        raise RuntimeError(f"Local Falcon request failed: {message}")
+    return data
+
+
+def scan_grid_local_falcon_saved_report(api_key, keyword, place_id, grid_size=None,
+                                        target_place_ids=None, candidate_names=None):
+    """Retrieve the latest matching saved Local Falcon scan report and normalize it."""
+    if not api_key:
+        raise RuntimeError("Local Falcon API key is not configured.")
+    normalized_place_id = _normalize_place_id(place_id)
+    if not normalized_place_id:
+        raise RuntimeError("Local Falcon report retrieval requires a linked Google Place ID.")
+
+    list_payload = {
+        "limit": 25,
+        "place_id": normalized_place_id,
+        "keyword": keyword,
+        "platform": "google",
+        "fields": "report_key,timestamp,date,platform,place_id,keyword,grid_size,radius,measurement,found_in,arp,atrp,solv,public_url",
+    }
+    data = _local_falcon_post("/v1/reports/", api_key, list_payload)
+    reports = ((data.get("data") or {}).get("reports") or [])
+    matching_reports = []
+    normalized_keyword = " ".join((keyword or "").lower().split())
+    for report in reports:
+        report_place_id = _normalize_place_id(report.get("place_id") or (report.get("location") or {}).get("place_id") or "")
+        report_keyword = " ".join((report.get("keyword") or "").lower().split())
+        if report_place_id != normalized_place_id:
+            continue
+        if normalized_keyword and report_keyword and normalized_keyword not in report_keyword and report_keyword not in normalized_keyword:
+            continue
+        matching_reports.append(report)
+
+    if not matching_reports:
+        return None, {
+            "rank_provider": "local_falcon_saved_report",
+            "api_diagnostics": {
+                "local_falcon_saved_report": {
+                    "provider": "local_falcon_saved_report",
+                    "ok": False,
+                    "error": "No saved Local Falcon scan report matched this Place ID and keyword.",
+                    "reports_returned": len(reports),
+                }
+            },
+        }
+
+    matching_reports.sort(key=lambda item: int(item.get("timestamp") or 0), reverse=True)
+    selected_report = matching_reports[0]
+    report_key = selected_report.get("report_key")
+    if not report_key:
+        raise RuntimeError("Local Falcon saved report is missing report_key.")
+
+    report_data = _local_falcon_post(f"/v1/reports/{report_key}/", api_key, {"report_key": report_key})
+    scan_data = report_data.get("data") or {}
+    raw_points = scan_data.get("data_points") or []
+    report_grid_size = int(scan_data.get("grid_size") or selected_report.get("grid_size") or grid_size or 1)
+    normalized_target_ids = {
+        _normalize_place_id(value)
+        for value in [normalized_place_id, *(target_place_ids or [])]
+        if _normalize_place_id(value)
+    }
+    names = candidate_names or []
+
+    results = []
+    for index, point in enumerate(raw_points):
+        rank_value = point.get("rank")
+        try:
+            rank = int(rank_value) if rank_value not in (False, None, "") else 0
+        except (TypeError, ValueError):
+            rank = 0
+
+        competitors = []
+        for comp in (point.get("results") or [])[:10]:
+            comp_place_id = _normalize_place_id(comp.get("place_id") or "")
+            comp_name = (comp.get("business") or comp.get("name") or "").strip()
+            competitors.append({
+                "rank": int(comp.get("rank") or len(competitors) + 1),
+                "name": comp_name,
+                "place_id": comp_place_id,
+                "address": (comp.get("address") or "").strip(),
+                "is_target": bool(
+                    (comp_place_id and comp_place_id in normalized_target_ids) or
+                    _matches_candidate_name(comp_name, names)
+                ),
+            })
+
+        results.append({
+            "row": index // max(report_grid_size, 1),
+            "col": index % max(report_grid_size, 1),
+            "lat": float(point.get("lat") or 0),
+            "lng": float(point.get("lng") or 0),
+            "rank": rank,
+            "competitors": competitors,
+        })
+
+    debug = {
+        "business_name_used": names[0] if names else "",
+        "place_id_used": normalized_place_id,
+        "target_place_ids_used": sorted(normalized_target_ids),
+        "alternate_names_used": names[1:] if len(names) > 1 else [],
+        "brand_query": False,
+        "rank_provider": "local_falcon_saved_report",
+        "places_returned": len(raw_points[0].get("results") or []) if raw_points else 0,
+        "debug_point": "center via saved Local Falcon report",
+        "top_results": [
+            {
+                "name": (item.get("business") or item.get("name") or ""),
+                "id": item.get("place_id") or "",
+            }
+            for item in ((raw_points[0] or {}).get("results") or [])[:10]
+        ] if raw_points else [],
+        "api_diagnostics": {
+            "local_falcon_saved_report": {
+                "provider": "local_falcon_saved_report",
+                "ok": True,
+                "report_key": report_key,
+                "date": scan_data.get("date") or selected_report.get("date"),
+                "public_url": scan_data.get("public_url") or selected_report.get("public_url"),
+                "points": scan_data.get("points") or len(results),
+                "found": scan_data.get("found_in") or selected_report.get("found_in"),
+                "arp": scan_data.get("arp") or selected_report.get("arp"),
+                "atrp": scan_data.get("atrp") or selected_report.get("atrp"),
+                "solv": scan_data.get("solv") or selected_report.get("solv"),
+            }
+        },
+    }
+    return results, debug
 
 
 def scan_grid_local_falcon(api_key, keyword, place_id, center_lat, center_lng, grid_size,

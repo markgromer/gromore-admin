@@ -12,6 +12,7 @@ from webapp.heatmap import (
     scan_grid,
     scan_grid_google_rank_only,
     scan_grid_local_falcon,
+    scan_grid_local_falcon_saved_report,
     summarize_competitor_landscape,
 )
 
@@ -368,16 +369,18 @@ class ClientHeatmapTests(unittest.TestCase):
 
     @patch("webapp.heatmap.scan_grid_google_rank_only")
     @patch("webapp.heatmap.scan_grid_local_falcon")
+    @patch("webapp.heatmap.scan_grid_local_falcon_saved_report")
     @patch("webapp.heatmap.verify_place_id")
     @patch("webapp.heatmap.calc_search_radius_m")
     @patch("webapp.heatmap.generate_grid")
     @patch("webapp.heatmap.clean_keyword")
-    def test_heatmap_scan_falls_back_when_local_falcon_rejects_permission(
+    def test_heatmap_scan_retrieves_saved_local_falcon_report_first(
         self,
         mock_clean_keyword,
         mock_generate_grid,
         mock_calc_search_radius_m,
         mock_verify_place_id,
+        mock_saved_report,
         mock_local_falcon,
         mock_google_rank_only,
     ):
@@ -385,8 +388,59 @@ class ClientHeatmapTests(unittest.TestCase):
         mock_generate_grid.return_value = [{"row": 0, "col": 0, "lat": 33.5001, "lng": -112.1999}]
         mock_calc_search_radius_m.return_value = 5000
         mock_verify_place_id.return_value = {"name": "Heatmap Test Brand Phoenix"}
-        mock_local_falcon.side_effect = RuntimeError(
-            "Local Falcon scan failed: You do not have permission to access Local Falcon On-Demand API endpoints."
+        mock_saved_report.return_value = (
+            [{"row": 0, "col": 0, "lat": 33.5001, "lng": -112.1999, "rank": 2, "competitors": []}],
+            {"rank_provider": "local_falcon_saved_report", "api_diagnostics": {"local_falcon_saved_report": {"ok": True}}},
+        )
+
+        with self.app.app_context():
+            self.app.db.update_brand_text_field(self.brand_id, "google_place_id", "place-123")
+            self.app.db.update_brand_text_field(self.brand_id, "local_falcon_api_key", "lf-key")
+
+        response = self.client.post(
+            "/client/heatmap/scan",
+            json={
+                "keyword": "pet waste removal",
+                "radius_miles": 3,
+                "grid_size": 3,
+                "center_lat": 33.5001,
+                "center_lng": -112.1999,
+            },
+        )
+        payload = response.get_json()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["results"][0]["rank"], 2)
+        self.assertEqual(payload["debug"]["rank_provider"], "local_falcon_saved_report")
+        mock_saved_report.assert_called_once()
+        mock_local_falcon.assert_not_called()
+        mock_google_rank_only.assert_not_called()
+
+    @patch("webapp.heatmap.scan_grid_google_rank_only")
+    @patch("webapp.heatmap.scan_grid_local_falcon")
+    @patch("webapp.heatmap.scan_grid_local_falcon_saved_report")
+    @patch("webapp.heatmap.verify_place_id")
+    @patch("webapp.heatmap.calc_search_radius_m")
+    @patch("webapp.heatmap.generate_grid")
+    @patch("webapp.heatmap.clean_keyword")
+    def test_heatmap_scan_falls_back_without_on_demand_when_saved_report_missing(
+        self,
+        mock_clean_keyword,
+        mock_generate_grid,
+        mock_calc_search_radius_m,
+        mock_verify_place_id,
+        mock_saved_report,
+        mock_local_falcon,
+        mock_google_rank_only,
+    ):
+        mock_clean_keyword.return_value = ("pet waste removal", False)
+        mock_generate_grid.return_value = [{"row": 0, "col": 0, "lat": 33.5001, "lng": -112.1999}]
+        mock_calc_search_radius_m.return_value = 5000
+        mock_verify_place_id.return_value = {"name": "Heatmap Test Brand Phoenix"}
+        mock_saved_report.return_value = (
+            None,
+            {"api_diagnostics": {"local_falcon_saved_report": {"error": "No saved Local Falcon scan report matched this Place ID and keyword."}}},
         )
         mock_google_rank_only.return_value = (
             [{"row": 0, "col": 0, "lat": 33.5001, "lng": -112.1999, "rank": 4, "competitors": []}],
@@ -412,9 +466,10 @@ class ClientHeatmapTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertTrue(payload["ok"])
         self.assertEqual(payload["results"][0]["rank"], 4)
-        self.assertIn("On-Demand API", payload["debug"]["local_falcon_error"])
-        self.assertEqual(payload["debug"]["api_diagnostics"]["local_falcon"]["fallback"], "google_rank_only")
-        mock_local_falcon.assert_called_once()
+        self.assertIn("No saved Local Falcon", payload["debug"]["local_falcon_error"])
+        self.assertEqual(payload["debug"]["api_diagnostics"]["local_falcon_saved_report"]["fallback"], "google_rank_only")
+        mock_saved_report.assert_called_once()
+        mock_local_falcon.assert_not_called()
         mock_google_rank_only.assert_called_once()
 
     def test_heatmap_scan_rejects_invalid_custom_center(self):
@@ -824,6 +879,72 @@ class ClientHeatmapTests(unittest.TestCase):
         self.assertEqual(debug["rank_provider"], "local_falcon")
         self.assertEqual(debug["api_diagnostics"]["local_falcon"]["solv"], 5)
         self.assertEqual(mock_post.call_args.kwargs["data"]["measurement"], "mi")
+
+    @patch("webapp.heatmap.requests.post")
+    def test_local_falcon_saved_report_retrieves_and_normalizes_grid_results(self, mock_post):
+        list_response = Mock(status_code=200)
+        list_response.json.return_value = {
+            "success": True,
+            "data": {
+                "reports": [
+                    {
+                        "report_key": "report-123",
+                        "timestamp": "200",
+                        "place_id": "place-123",
+                        "keyword": "pet waste removal",
+                        "grid_size": "1",
+                        "date": "5/5/2026 9:00 AM",
+                    }
+                ]
+            },
+        }
+        report_response = Mock(status_code=200)
+        report_response.json.return_value = {
+            "success": True,
+            "data": {
+                "report_key": "report-123",
+                "date": "5/5/2026 9:00 AM",
+                "place_id": "place-123",
+                "keyword": "pet waste removal",
+                "grid_size": "1",
+                "points": "1",
+                "found_in": "1",
+                "arp": "2.00",
+                "atrp": "2.00",
+                "solv": "5.00",
+                "public_url": "https://localrankingtracker.com/scan-report/report-123/",
+                "data_points": [
+                    {
+                        "lat": "33.4484",
+                        "lng": "-112.0740",
+                        "found": True,
+                        "rank": 2,
+                        "count": 2,
+                        "results": [
+                            {"rank": 1, "place_id": "rival-1", "name": "Rival Plumbing", "address": "123 Main St"},
+                            {"rank": 2, "place_id": "place-123", "name": "Heatmap Test Brand Phoenix", "address": "456 Oak Ave"},
+                        ],
+                    }
+                ],
+            },
+        }
+        mock_post.side_effect = [list_response, report_response]
+
+        results, debug = scan_grid_local_falcon_saved_report(
+            "lf-key",
+            "pet waste removal",
+            "place-123",
+            grid_size=1,
+            candidate_names=["Heatmap Test Brand", "Heatmap Test Brand Phoenix"],
+        )
+
+        self.assertEqual(results[0]["rank"], 2)
+        self.assertEqual(results[0]["competitors"][1]["place_id"], "place-123")
+        self.assertTrue(results[0]["competitors"][1]["is_target"])
+        self.assertEqual(debug["rank_provider"], "local_falcon_saved_report")
+        self.assertEqual(debug["api_diagnostics"]["local_falcon_saved_report"]["report_key"], "report-123")
+        self.assertEqual(mock_post.call_args_list[0].args[0], "https://api.localfalcon.com/v1/reports/")
+        self.assertEqual(mock_post.call_args_list[1].args[0], "https://api.localfalcon.com/v1/reports/report-123/")
 
     @patch("webapp.heatmap.scan_grid_google_rank_only")
     @patch("webapp.heatmap.verify_place_id")

@@ -5473,26 +5473,67 @@ def _finalize_heatmap_scan(*, keyword, api_key, business_name, grid_points, plac
                            business_lat, business_lng, keyword_warning, keyword_was_cleaned,
                            target_place_ids=None, local_falcon_api_key="", grid_size=None,
                            radius_miles=None, center_lat=None, center_lng=None):
-    from webapp.heatmap import scan_grid_google_rank_only, scan_grid_local_falcon, summarize_competitor_landscape
+    from webapp.heatmap import (
+        scan_grid_google_rank_only,
+        scan_grid_local_falcon,
+        scan_grid_local_falcon_saved_report,
+        summarize_competitor_landscape,
+    )
 
     try:
         local_falcon_error = None
+        local_falcon_report_miss = None
         if local_falcon_api_key:
             try:
-                results, debug_info = scan_grid_local_falcon(
+                results, debug_info = scan_grid_local_falcon_saved_report(
                     local_falcon_api_key,
                     keyword,
                     place_id,
-                    center_lat if center_lat is not None else business_lat,
-                    center_lng if center_lng is not None else business_lng,
                     grid_size or int(len(grid_points) ** 0.5),
-                    radius_miles or 5,
                     target_place_ids=target_place_ids,
                     candidate_names=[business_name, *(alternate_names or [])],
                 )
+                if results is None:
+                    local_falcon_report_miss = (
+                        ((debug_info or {}).get("api_diagnostics") or {})
+                        .get("local_falcon_saved_report", {})
+                        .get("error")
+                    ) or "No saved Local Falcon scan report matched this scan."
+                else:
+                    debug_info = debug_info or {}
+                    debug_info["local_falcon_source"] = "saved_report"
             except Exception as exc:
                 local_falcon_error = str(exc)
-                current_app.logger.warning("Local Falcon scan failed; falling back to Google rank-only: %s", exc)
+                current_app.logger.warning("Local Falcon saved report lookup failed: %s", exc)
+
+            allow_on_demand = str(os.environ.get("LOCAL_FALCON_ALLOW_ON_DEMAND", "")).strip().lower() in {"1", "true", "yes", "on"}
+            if local_falcon_report_miss and allow_on_demand:
+                try:
+                    results, debug_info = scan_grid_local_falcon(
+                        local_falcon_api_key,
+                        keyword,
+                        place_id,
+                        center_lat if center_lat is not None else business_lat,
+                        center_lng if center_lng is not None else business_lng,
+                        grid_size or int(len(grid_points) ** 0.5),
+                        radius_miles or 5,
+                        target_place_ids=target_place_ids,
+                        candidate_names=[business_name, *(alternate_names or [])],
+                    )
+                    debug_info = debug_info or {}
+                    debug_info["local_falcon_source"] = "on_demand"
+                    diagnostics = debug_info.setdefault("api_diagnostics", {})
+                    diagnostics["local_falcon_saved_report"] = {
+                        "provider": "local_falcon_saved_report",
+                        "ok": False,
+                        "error": local_falcon_report_miss,
+                        "fallback": "local_falcon_on_demand",
+                    }
+                except Exception as exc:
+                    local_falcon_error = str(exc)
+                    current_app.logger.warning("Local Falcon scan failed; falling back to Google rank-only: %s", exc)
+            elif local_falcon_report_miss:
+                local_falcon_error = local_falcon_report_miss
 
         if not local_falcon_api_key or local_falcon_error:
             results, debug_info = scan_grid_google_rank_only(
@@ -5506,16 +5547,23 @@ def _finalize_heatmap_scan(*, keyword, api_key, business_name, grid_points, plac
                 brand_query=brand_query,
                 target_place_ids=target_place_ids,
             )
-            if local_falcon_error:
+            if local_falcon_error or local_falcon_report_miss:
                 debug_info = debug_info or {}
                 diagnostics = debug_info.setdefault("api_diagnostics", {})
+                if local_falcon_report_miss:
+                    diagnostics["local_falcon_saved_report"] = {
+                        "provider": "local_falcon_saved_report",
+                        "ok": False,
+                        "error": local_falcon_report_miss,
+                        "fallback": "google_rank_only",
+                    }
                 diagnostics["local_falcon"] = {
                     "provider": "local_falcon",
                     "ok": False,
-                    "error": local_falcon_error,
+                    "error": local_falcon_error or local_falcon_report_miss,
                     "fallback": "google_rank_only",
                 }
-                debug_info["local_falcon_error"] = local_falcon_error
+                debug_info["local_falcon_error"] = local_falcon_error or local_falcon_report_miss
                 debug_info["local_falcon_fallback"] = "Google rank-only scan used because Local Falcon failed."
     except Exception as exc:
         raise RuntimeError(f"Scan failed: {exc}") from exc
@@ -14269,12 +14317,12 @@ def client_heatmap_test_api():
     if local_falcon_key:
         checks["local_falcon"] = {
             "ok": True,
-            "detail": "Token saved. Scans try Local Falcon first and fall back to Google rank-only if On-Demand API access is not allowed.",
+            "detail": "Token saved. Scans retrieve matching saved Local Falcon reports first and fall back to Google rank-only when no report is available.",
         }
     else:
         checks["local_falcon"] = {
             "ok": False,
-            "detail": "Not configured. Add a Local Falcon token in Connections to use full geo-grid scans.",
+            "detail": "Not configured. Add a Local Falcon token in Connections to retrieve saved Local Falcon geo-grid reports.",
         }
 
     all_ok = all(c["ok"] for key, c in checks.items() if key != "local_falcon")

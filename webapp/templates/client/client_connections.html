@@ -474,7 +474,7 @@
                 <div class="connection-panel-shell card mt-3 mb-0" style="box-shadow:none;">
                     <div class="card-body">
                         <h6 class="fw-semibold mb-1">API Key</h6>
-                        <p class="text-muted mb-3" style="font-size:.88rem;">Google powers rank-only Places scans, place search, geocoding, and map rendering. Local Falcon is optional for full geo-grid scans using your own token.</p>
+                        <p class="text-muted mb-3" style="font-size:.88rem;">Google powers rank-only Places scans, place search, geocoding, and map rendering. Local Falcon is optional for retrieving saved geo-grid reports using your own token.</p>
                         <form action="{{ url_for('client.client_save_maps_api') }}" method="POST">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                             <div class="row g-3 align-items-end">
@@ -490,7 +490,7 @@
                                     <input type="password" class="form-control" name="local_falcon_api_key"
                                            placeholder="{{ 'Configured ••••' if brand.local_falcon_api_key else 'Optional' }}"
                                            autocomplete="off">
-                                    <small class="text-muted d-block mt-2">Leave blank to keep the current token. When configured, heatmaps use Local Falcon for full grid scan data.</small>
+                                    <small class="text-muted d-block mt-2">Leave blank to keep the current token. When configured, heatmaps pull matching saved Local Falcon reports before falling back to Google rank-only.</small>
                                 </div>
                                 <div class="col-lg-4">
                                     <button class="btn btn-primary w-100" type="submit">Save API Keys</button>

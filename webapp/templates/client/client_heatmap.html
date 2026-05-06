@@ -256,7 +256,7 @@
 
 <div class="hm-header">
     <h3><i class="bi bi-geo-alt me-2"></i>Local Rank Heatmap</h3>
-    <p>Drag the scan center, set your grid, and run a Place ID rank-only scan across your service area. Add a Local Falcon token for full geo-grid ranking detail.</p>
+    <p>Drag the scan center, set your grid, and run a Place ID rank-only scan across your service area. Add a Local Falcon token to retrieve saved geo-grid report detail.</p>
 </div>
 
 {% set has_location = brand.business_lat and brand.business_lng and brand.business_lat != 0 %}
@@ -631,7 +631,7 @@
         <div class="card mt-3" style="border:none; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,.05);">
             <div class="card-body p-3 p-md-4">
                 <h6 class="mb-2"><i class="bi bi-calendar2-week me-1"></i> Weekly scheduled scans</h6>
-                <p class="text-muted mb-3" style="font-size:.84rem;">Track the same service terms every week. Local Falcon can be used when the saved token has access; otherwise Google rank-only keeps running.</p>
+                <p class="text-muted mb-3" style="font-size:.84rem;">Track the same service terms every week. Local Falcon pulls matching saved reports when available; otherwise Google rank-only keeps running.</p>
                 {% set schedule_defaults = schedules[0] if schedules else none %}
                 <form method="POST" action="{{ url_for('client.client_heatmap_schedules') }}">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -674,7 +674,7 @@
                             <label class="form-label fw-semibold" style="font-size:.8rem;">Provider</label>
                             <select class="form-select form-select-sm" name="provider_preference">
                                 <option value="google" {% if (schedule_defaults and schedule_defaults.provider_preference == 'google') or (not schedule_defaults and not local_falcon_configured) %}selected{% endif %}>Google rank-only</option>
-                                <option value="local_falcon" {% if (schedule_defaults and schedule_defaults.provider_preference == 'local_falcon') or (not schedule_defaults and local_falcon_configured) %}selected{% endif %}>Local Falcon first</option>
+                                <option value="local_falcon" {% if (schedule_defaults and schedule_defaults.provider_preference == 'local_falcon') or (not schedule_defaults and local_falcon_configured) %}selected{% endif %}>Local Falcon saved reports first</option>
                                 <option value="auto" {% if schedule_defaults and schedule_defaults.provider_preference == 'auto' %}selected{% endif %}>Auto fallback</option>
                             </select>
                         </div>
@@ -713,7 +713,7 @@
                     <li>Set the keyword, radius, and odd grid size you want to test</li>
                     <li>Drag the scan center pin or click the map to move the grid</li>
                     <li>Google mode checks rank-only Places results around every grid point and matches your linked Place ID</li>
-                    <li>When a Local Falcon token is saved, scans use Local Falcon for full geo-grid ranking detail</li>
+                    <li>When a Local Falcon token is saved, scans retrieve matching saved Local Falcon reports before falling back to Google rank-only</li>
                     <li>Green means top 3 in the local pack, yellow means top 10 in the local pack, red means lower local-pack visibility, and gray means the scan did not return you</li>
                     <li>The highlighted cell is the grid point closest to the live scan center</li>
                     <li>Service-area businesses can rank on page one organically while still being inconsistent in Google Maps and local-pack results</li>
@@ -1261,10 +1261,10 @@ function showDebug(debugInfo) {
         '<strong>Debug:</strong> Matching business name: <code>' + (debugInfo.business_name_used || 'none') + '</code>' +
         ' | Place ID: <code>' + (debugInfo.place_id_used || 'none') + '</code>' +
         ' | Rank provider: <code>' + (debugInfo.rank_provider || 'unknown') + '</code>' +
-        ' | Search radius: ' + Math.round(debugInfo.search_radius_m) + 'm' +
+        (Number.isFinite(Number(debugInfo.search_radius_m)) ? ' | Search radius: ' + Math.round(debugInfo.search_radius_m) + 'm' : '') +
         ' | Results returned: ' + debugInfo.places_returned +
         (debugInfo.debug_point ? ' | Sample point: ' + debugInfo.debug_point : '') +
-        '<br><strong>Ranked Place IDs (center grid point - Google rank-only scan):</strong> ' +
+        '<br><strong>Ranked results (center grid point):</strong> ' +
         (debugInfo.top_results && debugInfo.top_results.length ? debugInfo.top_results.map(function(result, index) {
             var match = debugInfo.place_id_used && result.id === debugInfo.place_id_used ? ' <span style="color:#22c55e; font-weight:600;">MATCH</span>' : '';
             var label = result.name || 'Place ID only';
@@ -1284,6 +1284,12 @@ function showDebug(debugInfo) {
             if (info.gstatus) parts.push('Google status: ' + info.gstatus);
             if (info.zoom !== undefined) parts.push('Zoom: ' + info.zoom);
             if (info.count !== undefined) parts.push('<strong>' + info.count + ' results</strong>');
+            if (info.report_key) parts.push('Report: ' + escapeHtml(info.report_key));
+            if (info.date) parts.push('Date: ' + escapeHtml(info.date));
+            if (info.points !== undefined) parts.push('Points: ' + info.points);
+            if (info.found !== undefined) parts.push('Found: ' + info.found);
+            if (info.solv !== undefined) parts.push('SoLV: ' + info.solv);
+            if (info.public_url) parts.push('<a href="' + escapeHtml(info.public_url) + '" target="_blank" rel="noopener">Open Local Falcon report</a>');
             if (info.title) parts.push('Page: ' + escapeHtml(info.title));
             if (info.error_message) parts.push(info.error_message);
             if (!parts.length) parts.push('attempted');
@@ -1292,6 +1298,7 @@ function showDebug(debugInfo) {
         }
 
         diagnosticsHtml += apiRow('Google rank-only Places', diagnostics.google_rank_only);
+        if (diagnostics.local_falcon_saved_report) diagnosticsHtml += apiRow('Local Falcon saved report', diagnostics.local_falcon_saved_report);
         if (diagnostics.local_falcon) diagnosticsHtml += apiRow('Local Falcon', diagnostics.local_falcon);
         if (diagnostics.new_api || diagnostics.legacy_api || diagnostics.nearby_api || diagnostics.find_place) {
             diagnosticsHtml += '<br><span style="color:#64748b; font-weight:600;">Compatibility Places APIs:</span>';
