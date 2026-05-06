@@ -133,10 +133,10 @@
                         </select>
                     </div>
                     <div>
-                        <label class="form-label fw-medium">Export Layout</label>
+                        <label class="form-label fw-medium">Frame Style</label>
                         <select class="form-select" name="frame_style">
                             {% for frame in frame_styles %}
-                            <option value="{{ frame.key }}" {% if frame.key == 'card' %}selected{% endif %}>{{ frame.label }}</option>
+                            <option value="{{ frame.key }}" {% if frame.key == 'top_tab' %}selected{% endif %}>{{ frame.label }}</option>
                             {% endfor %}
                         </select>
                     </div>
@@ -149,7 +149,7 @@
                         </select>
                     </div>
                 </div>
-                <small class="text-muted d-block mt-2">The QR matrix stays square for reliable scanning; the exported layout can be card, label, ticket, or tag shaped.</small>
+                <small class="text-muted d-block mt-2">The QR matrix stays square for reliable scanning; the frame around it can carry the personality.</small>
                 <button class="btn btn-primary w-100 mt-3" type="submit">
                     <i class="bi bi-plus-circle me-1"></i> Generate Tracked QR
                 </button>

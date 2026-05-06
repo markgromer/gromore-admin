@@ -66,7 +66,7 @@ class ClientQrStudioTests(unittest.TestCase):
                 "frame_text": "Scan for reviews",
                 "module_style": "circle",
                 "badge_shape": "monogram",
-                "frame_style": "label",
+                "frame_style": "side_callout",
             },
             follow_redirects=False,
         )
@@ -80,7 +80,7 @@ class ClientQrStudioTests(unittest.TestCase):
         self.assertEqual(qr["target_url"], "https://example.com/review")
         self.assertEqual(qr["module_style"], "circle")
         self.assertEqual(qr["badge_shape"], "monogram")
-        self.assertEqual(qr["frame_style"], "label")
+        self.assertEqual(qr["frame_style"], "side_callout")
 
         png_response = self.client.get(f"/client/qr-studio/{qr['id']}/png")
         self.assertEqual(png_response.status_code, 200)

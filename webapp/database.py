@@ -800,7 +800,7 @@ class WebDB:
                 frame_text TEXT NOT NULL DEFAULT '',
                 module_style TEXT NOT NULL DEFAULT 'rounded',
                 badge_shape TEXT NOT NULL DEFAULT 'none',
-                frame_style TEXT NOT NULL DEFAULT 'card',
+                frame_style TEXT NOT NULL DEFAULT 'top_tab',
                 scans INTEGER NOT NULL DEFAULT 0,
                 last_scanned_at TEXT NOT NULL DEFAULT '',
                 active INTEGER NOT NULL DEFAULT 1,
@@ -2539,7 +2539,7 @@ class WebDB:
         new_qr_cols = [
             ("module_style", "TEXT NOT NULL DEFAULT 'rounded'"),
             ("badge_shape", "TEXT NOT NULL DEFAULT 'none'"),
-            ("frame_style", "TEXT NOT NULL DEFAULT 'card'"),
+            ("frame_style", "TEXT NOT NULL DEFAULT 'top_tab'"),
         ]
         for col_name, col_def in new_qr_cols:
             if col_name not in qr_columns:
@@ -5515,7 +5515,7 @@ class WebDB:
     def create_qr_code(self, brand_id, name, target_url, tracking_slug,
                        foreground_color="#111827", background_color="#ffffff",
                        frame_text="", module_style="rounded", badge_shape="none",
-                       frame_style="card", created_by=""):
+                       frame_style="top_tab", created_by=""):
         conn = self._conn()
         conn.execute(
             """INSERT INTO qr_codes (
