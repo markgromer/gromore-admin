@@ -8946,6 +8946,239 @@ def _render_branded_qr_png(qr_record, tracking_url, brand):
     return out
 
 
+_PRINT_MATERIAL_TEMPLATES = {
+    "business_card": {
+        "label": "Business Card",
+        "size": "3.5 x 2 in",
+        "canvas": (1400, 800),
+        "preview_ratio": "7 / 4",
+        "default_cta": "Call for a free quote",
+    },
+    "referral_card": {
+        "label": "Referral Card",
+        "size": "3.5 x 2 in",
+        "canvas": (1400, 800),
+        "preview_ratio": "7 / 4",
+        "default_cta": "Scan to refer a neighbor",
+    },
+    "postcard": {
+        "label": "Postcard",
+        "size": "6 x 4 in",
+        "canvas": (1800, 1200),
+        "preview_ratio": "3 / 2",
+        "default_cta": "Scan to book service",
+    },
+    "door_hanger": {
+        "label": "Door Hanger",
+        "size": "4.25 x 11 in",
+        "canvas": (1100, 2847),
+        "preview_ratio": "4.25 / 11",
+        "default_cta": "Scan for neighborhood pricing",
+    },
+    "yard_sign": {
+        "label": "Yard Sign",
+        "size": "24 x 18 in",
+        "canvas": (1800, 1350),
+        "preview_ratio": "4 / 3",
+        "default_cta": "Call today",
+    },
+    "flyer": {
+        "label": "Flyer",
+        "size": "8.5 x 11 in",
+        "canvas": (1275, 1650),
+        "preview_ratio": "8.5 / 11",
+        "default_cta": "Scan to get started",
+    },
+    "brochure": {
+        "label": "Tri-Fold Brochure",
+        "size": "11 x 8.5 in",
+        "canvas": (1650, 1275),
+        "preview_ratio": "11 / 8.5",
+        "default_cta": "Scan for details",
+    },
+    "vehicle_wrap": {
+        "label": "Vehicle Wrap Concept",
+        "size": "Wide layout",
+        "canvas": (2200, 950),
+        "preview_ratio": "22 / 9.5",
+        "default_cta": "Book online",
+    },
+}
+
+
+def _print_template_choices():
+    return [
+        {"key": key, **value}
+        for key, value in _PRINT_MATERIAL_TEMPLATES.items()
+    ]
+
+
+def _brand_field(brand, *fields):
+    for field in fields:
+        value = ((brand or {}).get(field) or "").strip()
+        if value:
+            return value
+    return ""
+
+
+def _default_print_values(brand):
+    return {
+        "phone": _brand_field(brand, "phone", "business_phone", "primary_phone", "contact_phone"),
+        "website": _brand_field(brand, "website", "website_url", "site_url", "wp_site_url", "domain"),
+        "primary_color": _normalize_qr_color(
+            _brand_field(brand, "brand_primary_color", "primary_color"),
+            "#111827",
+        ),
+        "accent_color": _normalize_qr_color(
+            _brand_field(brand, "brand_secondary_color", "accent_color"),
+            "#0f766e",
+        ),
+    }
+
+
+def _clean_print_text(value, limit):
+    return re.sub(r"\s+", " ", (value or "").strip())[:limit]
+
+
+def _render_print_material_png(material, brand, qr_record=None):
+    import qrcode
+    from PIL import Image, ImageDraw, ImageFont
+
+    template = _PRINT_MATERIAL_TEMPLATES.get(material.get("material_type")) or _PRINT_MATERIAL_TEMPLATES["postcard"]
+    canvas_w, canvas_h = template["canvas"]
+    background = _normalize_qr_color(material.get("background_color"), "#ffffff")
+    primary = _normalize_qr_color(material.get("primary_color"), "#111827")
+    accent = _normalize_qr_color(material.get("accent_color"), "#0f766e")
+    canvas = Image.new("RGB", (canvas_w, canvas_h), background)
+    draw = ImageDraw.Draw(canvas)
+
+    def font(size, bold=False):
+        candidates = ["arialbd.ttf", "Arial Bold.ttf"] if bold else ["arial.ttf", "Arial.ttf"]
+        for candidate in candidates:
+            try:
+                return ImageFont.truetype(candidate, size)
+            except Exception:
+                continue
+        return ImageFont.load_default()
+
+    def wrap_text(text, draw_font, max_width):
+        words = _clean_print_text(text, 500).split()
+        lines = []
+        current = ""
+        for word in words:
+            candidate = f"{current} {word}".strip()
+            bbox = draw.textbbox((0, 0), candidate, font=draw_font)
+            if current and bbox[2] - bbox[0] > max_width:
+                lines.append(current)
+                current = word
+            else:
+                current = candidate
+        if current:
+            lines.append(current)
+        return lines or [""]
+
+    def draw_wrapped(text, xy, draw_font, fill, max_width, line_gap=10, max_lines=4):
+        x, y = xy
+        lines = wrap_text(text, draw_font, max_width)[:max_lines]
+        for line in lines:
+            draw.text((x, y), line, font=draw_font, fill=fill)
+            bbox = draw.textbbox((0, 0), line or "Ag", font=draw_font)
+            y += (bbox[3] - bbox[1]) + line_gap
+        return y
+
+    def fit_font_size(text, start_size, min_size, max_width, bold=False):
+        size = start_size
+        while size > min_size:
+            candidate = font(size, bold=bold)
+            lines = wrap_text(text, candidate, max_width)
+            if all((draw.textbbox((0, 0), line, font=candidate)[2] - draw.textbbox((0, 0), line, font=candidate)[0]) <= max_width for line in lines):
+                return candidate
+            size -= 4
+        return font(min_size, bold=bold)
+
+    margin = max(54, int(min(canvas_w, canvas_h) * 0.06))
+    band_h = max(90, int(canvas_h * 0.16))
+    draw.rectangle((0, 0, canvas_w, band_h), fill=primary)
+    draw.rectangle((0, band_h, canvas_w, band_h + max(16, band_h // 10)), fill=accent)
+
+    brand_name = _brand_field(brand, "display_name", "name") or "Your Business"
+    type_label = template["label"].upper()
+    draw.text((margin, max(22, band_h * 0.24)), brand_name[:70], font=font(max(28, int(canvas_h * 0.04)), True), fill="#ffffff")
+    type_font = font(max(18, int(canvas_h * 0.022)), True)
+    type_bbox = draw.textbbox((0, 0), type_label, font=type_font)
+    draw.text((canvas_w - margin - (type_bbox[2] - type_bbox[0]), max(28, band_h * 0.34)), type_label, font=type_font, fill="#d1fae5")
+
+    content_top = band_h + max(42, int(canvas_h * 0.045))
+    content_w = canvas_w - (margin * 2)
+    has_qr = bool(qr_record)
+    qr_size = int(min(canvas_w, canvas_h) * (0.22 if canvas_w >= canvas_h else 0.25))
+    qr_area_w = qr_size + (margin // 2) if has_qr else 0
+    text_w = content_w - qr_area_w - (margin // 2)
+    if text_w < content_w * 0.52:
+        text_w = int(content_w * 0.62)
+
+    headline = _clean_print_text(material.get("headline"), 120) or brand_name
+    headline_font = fit_font_size(headline, max(44, int(canvas_h * 0.085)), 30, text_w, True)
+    y = draw_wrapped(headline, (margin, content_top), headline_font, primary, text_w, line_gap=max(8, int(canvas_h * 0.012)), max_lines=3)
+
+    subheadline = _clean_print_text(material.get("subheadline"), 180)
+    if subheadline:
+        y += max(14, int(canvas_h * 0.018))
+        y = draw_wrapped(subheadline, (margin, y), font(max(24, int(canvas_h * 0.038))), "#334155", text_w, line_gap=8, max_lines=3)
+
+    offer = _clean_print_text(material.get("offer"), 160)
+    offer_h = max(74, int(canvas_h * 0.13))
+    offer_y = min(y + max(24, int(canvas_h * 0.04)), canvas_h - margin - offer_h - max(88, int(canvas_h * 0.12)))
+    if offer:
+        draw.rounded_rectangle((margin, offer_y, margin + text_w, offer_y + offer_h), radius=18, fill="#f8fafc", outline=accent, width=max(4, canvas_w // 360))
+        draw_wrapped(offer, (margin + 28, offer_y + max(18, offer_h // 5)), font(max(24, int(canvas_h * 0.038)), True), primary, text_w - 56, line_gap=8, max_lines=2)
+
+    cta = _clean_print_text(material.get("cta"), 90) or template["default_cta"]
+    contact_bits = [
+        _clean_print_text(material.get("phone"), 40),
+        _clean_print_text(material.get("website"), 80),
+    ]
+    contact = "  |  ".join([bit for bit in contact_bits if bit])
+    footer_h = max(90, int(canvas_h * 0.12))
+    footer_y = canvas_h - footer_h
+    draw.rectangle((0, footer_y, canvas_w, canvas_h), fill=primary)
+    draw.text((margin, footer_y + max(18, footer_h // 5)), cta, font=font(max(24, int(canvas_h * 0.035)), True), fill="#ffffff")
+    if contact:
+        draw.text((margin, footer_y + max(52, footer_h // 2)), contact[:120], font=font(max(18, int(canvas_h * 0.025))), fill="#d1d5db")
+
+    if has_qr:
+        qr = qrcode.QRCode(
+            version=None,
+            error_correction=qrcode.constants.ERROR_CORRECT_H,
+            box_size=12,
+            border=3,
+        )
+        qr.add_data(_qr_tracking_url(qr_record["tracking_slug"]))
+        qr.make(fit=True)
+        qr_img = qr.make_image(fill_color=primary, back_color="#ffffff").convert("RGB")
+        qr_img = qr_img.resize((qr_size, qr_size), Image.Resampling.NEAREST)
+        qr_pad = max(18, qr_size // 11)
+        qr_x = canvas_w - margin - qr_size - qr_pad
+        qr_y = content_top
+        draw.rounded_rectangle(
+            (qr_x - qr_pad, qr_y - qr_pad, qr_x + qr_size + qr_pad, qr_y + qr_size + qr_pad),
+            radius=22,
+            fill="#ffffff",
+            outline="#e2e8f0",
+            width=max(3, canvas_w // 500),
+        )
+        canvas.paste(qr_img, (qr_x, qr_y))
+        label = _clean_print_text(qr_record.get("frame_text"), 50) or "Scan here"
+        label_font = font(max(16, int(canvas_h * 0.022)), True)
+        label_bbox = draw.textbbox((0, 0), label, font=label_font)
+        draw.text((qr_x + (qr_size - (label_bbox[2] - label_bbox[0])) // 2, qr_y + qr_size + qr_pad // 2), label, font=label_font, fill=primary)
+
+    out = BytesIO()
+    canvas.save(out, format="PNG")
+    out.seek(0)
+    return out
+
+
 @client_bp.route("/qr-studio")
 @client_login_required
 def client_qr_studio():
@@ -9030,6 +9263,116 @@ def client_qr_studio_delete(qr_id):
     db.update_qr_code(qr_id, brand_id, active=0)
     flash("QR code archived.", "success")
     return redirect(url_for("client.client_qr_studio"))
+
+
+@client_bp.route("/print-studio")
+@client_login_required
+def client_print_studio():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        abort(404)
+    materials = db.get_print_materials(brand_id)
+    qr_codes = db.get_qr_codes(brand_id)
+    template_map = _PRINT_MATERIAL_TEMPLATES
+    for item in materials:
+        template = template_map.get(item.get("material_type")) or template_map["postcard"]
+        item["template_label"] = template["label"]
+        item["template_size"] = template["size"]
+        item["preview_ratio"] = template["preview_ratio"]
+    return render_template(
+        "client_print_studio.html",
+        brand=brand,
+        brand_name=session.get("client_brand_name", brand.get("display_name", "")),
+        materials=materials,
+        qr_codes=qr_codes,
+        templates=_print_template_choices(),
+        defaults=_default_print_values(brand),
+    )
+
+
+@client_bp.route("/print-studio", methods=["POST"])
+@client_login_required
+def client_print_studio_create():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        abort(404)
+    defaults = _default_print_values(brand)
+    material_type = (request.form.get("material_type") or "postcard").strip()
+    if material_type not in _PRINT_MATERIAL_TEMPLATES:
+        material_type = "postcard"
+    name = _clean_print_text(request.form.get("name"), 120) or _PRINT_MATERIAL_TEMPLATES[material_type]["label"]
+    headline = _clean_print_text(request.form.get("headline"), 120)
+    subheadline = _clean_print_text(request.form.get("subheadline"), 180)
+    offer = _clean_print_text(request.form.get("offer"), 160)
+    cta = _clean_print_text(request.form.get("cta"), 90) or _PRINT_MATERIAL_TEMPLATES[material_type]["default_cta"]
+    phone = _clean_print_text(request.form.get("phone"), 40) or defaults["phone"]
+    website = _clean_print_text(request.form.get("website"), 80) or defaults["website"]
+    qr_code_id = None
+    raw_qr_code_id = (request.form.get("qr_code_id") or "").strip()
+    if raw_qr_code_id.isdigit():
+        qr_record = db.get_qr_code(int(raw_qr_code_id), brand_id)
+        if qr_record and int(qr_record.get("active") or 0) == 1:
+            qr_code_id = int(raw_qr_code_id)
+
+    primary = _normalize_qr_color(request.form.get("primary_color"), defaults["primary_color"])
+    accent = _normalize_qr_color(request.form.get("accent_color"), defaults["accent_color"])
+    background = _normalize_qr_color(request.form.get("background_color"), "#ffffff")
+    created_by = session.get("client_user_email") or session.get("client_brand_name") or ""
+    db.create_print_material(
+        brand_id,
+        material_type,
+        name,
+        headline=headline,
+        subheadline=subheadline,
+        offer=offer,
+        cta=cta,
+        phone=phone,
+        website=website,
+        qr_code_id=qr_code_id,
+        primary_color=primary,
+        accent_color=accent,
+        background_color=background,
+        design_json=json.dumps({"template_version": 1}),
+        created_by=created_by,
+    )
+    flash("Print material created.", "success")
+    return redirect(url_for("client.client_print_studio"))
+
+
+@client_bp.route("/print-studio/<int:material_id>/png")
+@client_login_required
+def client_print_studio_png(material_id):
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    material = db.get_print_material(material_id, brand_id)
+    if not brand or not material or int(material.get("active") or 0) != 1:
+        abort(404)
+    qr_record = None
+    if material.get("qr_code_id"):
+        qr_record = db.get_qr_code(material["qr_code_id"], brand_id)
+    img = _render_print_material_png(material, brand, qr_record=qr_record)
+    filename = re.sub(r"[^a-zA-Z0-9_-]+", "-", material.get("name") or "print-material").strip("-").lower() or "print-material"
+    return send_file(
+        img,
+        mimetype="image/png",
+        as_attachment=bool(request.args.get("download")),
+        download_name=f"{filename}.png",
+    )
+
+
+@client_bp.route("/print-studio/<int:material_id>/delete", methods=["POST"])
+@client_login_required
+def client_print_studio_delete(material_id):
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    db.update_print_material(material_id, brand_id, active=0)
+    flash("Print material archived.", "success")
+    return redirect(url_for("client.client_print_studio"))
 
 
 @client_public_bp.route("/q/<tracking_slug>")

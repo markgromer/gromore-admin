@@ -821,12 +821,41 @@ class WebDB:
             );
         """)
         conn.execute("""
+            CREATE TABLE IF NOT EXISTS print_materials (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                brand_id INTEGER NOT NULL,
+                material_type TEXT NOT NULL DEFAULT 'postcard',
+                name TEXT NOT NULL DEFAULT 'Untitled Print Material',
+                headline TEXT NOT NULL DEFAULT '',
+                subheadline TEXT NOT NULL DEFAULT '',
+                offer TEXT NOT NULL DEFAULT '',
+                cta TEXT NOT NULL DEFAULT '',
+                phone TEXT NOT NULL DEFAULT '',
+                website TEXT NOT NULL DEFAULT '',
+                qr_code_id INTEGER,
+                primary_color TEXT NOT NULL DEFAULT '#111827',
+                accent_color TEXT NOT NULL DEFAULT '#0f766e',
+                background_color TEXT NOT NULL DEFAULT '#ffffff',
+                design_json TEXT NOT NULL DEFAULT '{}',
+                active INTEGER NOT NULL DEFAULT 1,
+                created_by TEXT NOT NULL DEFAULT '',
+                created_at TEXT DEFAULT (datetime('now')),
+                updated_at TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (brand_id) REFERENCES brands(id) ON DELETE CASCADE,
+                FOREIGN KEY (qr_code_id) REFERENCES qr_codes(id) ON DELETE SET NULL
+            );
+        """)
+        conn.execute("""
             CREATE INDEX IF NOT EXISTS idx_qr_codes_brand_active
             ON qr_codes(brand_id, active, updated_at);
         """)
         conn.execute("""
             CREATE INDEX IF NOT EXISTS idx_qr_code_scans_qr_time
             ON qr_code_scans(qr_code_id, scanned_at);
+        """)
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_print_materials_brand_active
+            ON print_materials(brand_id, active, updated_at);
         """)
 
         conn.execute("""
@@ -5586,6 +5615,110 @@ class WebDB:
         ).fetchall()
         conn.close()
         return {int(r["qr_code_id"]): dict(r) for r in rows}
+
+    # Print Studio
+
+    def create_print_material(self, brand_id, material_type, name, headline="",
+                              subheadline="", offer="", cta="", phone="", website="",
+                              qr_code_id=None, primary_color="#111827",
+                              accent_color="#0f766e", background_color="#ffffff",
+                              design_json="{}", created_by=""):
+        conn = self._conn()
+        conn.execute(
+            """INSERT INTO print_materials (
+                   brand_id, material_type, name, headline, subheadline, offer, cta,
+                   phone, website, qr_code_id, primary_color, accent_color,
+                   background_color, design_json, created_by
+               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                brand_id,
+                material_type,
+                name,
+                headline,
+                subheadline,
+                offer,
+                cta,
+                phone,
+                website,
+                qr_code_id,
+                primary_color,
+                accent_color,
+                background_color,
+                design_json,
+                created_by,
+            ),
+        )
+        conn.commit()
+        material_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+        conn.close()
+        return int(material_id)
+
+    def get_print_materials(self, brand_id, include_inactive=False):
+        conn = self._conn()
+        if include_inactive:
+            rows = conn.execute(
+                "SELECT * FROM print_materials WHERE brand_id = ? ORDER BY updated_at DESC",
+                (brand_id,),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT * FROM print_materials WHERE brand_id = ? AND active = 1 ORDER BY updated_at DESC",
+                (brand_id,),
+            ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    def get_print_material(self, material_id, brand_id=None):
+        conn = self._conn()
+        if brand_id is None:
+            row = conn.execute(
+                "SELECT * FROM print_materials WHERE id = ?",
+                (material_id,),
+            ).fetchone()
+        else:
+            row = conn.execute(
+                "SELECT * FROM print_materials WHERE id = ? AND brand_id = ?",
+                (material_id, brand_id),
+            ).fetchone()
+        conn.close()
+        return dict(row) if row else None
+
+    def update_print_material(self, material_id, brand_id, *, material_type=None,
+                              name=None, headline=None, subheadline=None,
+                              offer=None, cta=None, phone=None, website=None,
+                              qr_code_id=None, primary_color=None, accent_color=None,
+                              background_color=None, design_json=None, active=None):
+        fields = ["updated_at = datetime('now')"]
+        values = []
+        updates = {
+            "material_type": material_type,
+            "name": name,
+            "headline": headline,
+            "subheadline": subheadline,
+            "offer": offer,
+            "cta": cta,
+            "phone": phone,
+            "website": website,
+            "qr_code_id": qr_code_id,
+            "primary_color": primary_color,
+            "accent_color": accent_color,
+            "background_color": background_color,
+            "design_json": design_json,
+            "active": active,
+        }
+        for field_name, value in updates.items():
+            if value is not None:
+                fields.append(f"{field_name} = ?")
+                values.append(value)
+        if len(fields) == 1:
+            return
+        conn = self._conn()
+        conn.execute(
+            f"UPDATE print_materials SET {', '.join(fields)} WHERE id = ? AND brand_id = ?",
+            (*values, material_id, brand_id),
+        )
+        conn.commit()
+        conn.close()
 
     def save_creative_font(self, brand_id, display_name, css_family, original_filename, file_path, mime_type, file_size, uploaded_by):
         conn = self._conn()
