@@ -17,7 +17,6 @@ import secrets
 import zipfile
 import csv
 import hashlib
-import math
 import requests
 from io import BytesIO, StringIO
 from functools import wraps
@@ -8899,20 +8898,19 @@ _QR_MODULE_STYLES = {
     "square": "Square",
     "circle": "Dots",
     "gapped": "Gapped",
-    "horizontal": "Horizontal Bars",
-    "vertical": "Vertical Bars",
 }
 
 _QR_BADGE_SHAPES = {
-    "none": "No Badge",
-    "paw": "Paw",
-    "bone": "Dog Bone",
-    "poop": "Poop",
-    "home": "House",
-    "star": "Star",
-    "heart": "Heart",
-    "wrench": "Tool",
-    "leaf": "Leaf",
+    "none": "No Center Mark",
+    "monogram": "Brand Monogram",
+}
+
+_QR_FRAME_STYLES = {
+    "card": "Premium Card",
+    "label": "Wide Label",
+    "ticket": "Ticket",
+    "arch": "Arch Tag",
+    "clean": "Clean Square",
 }
 
 
@@ -8923,7 +8921,14 @@ def _normalize_qr_module_style(value):
 
 def _normalize_qr_badge_shape(value):
     value = (value or "none").strip().lower()
+    if value in {"paw", "bone", "poop", "home", "star", "heart", "wrench", "leaf"}:
+        return "monogram"
     return value if value in _QR_BADGE_SHAPES else "none"
+
+
+def _normalize_qr_frame_style(value):
+    value = (value or "card").strip().lower()
+    return value if value in _QR_FRAME_STYLES else "card"
 
 
 def _qr_style_choices():
@@ -8934,14 +8939,16 @@ def _qr_badge_choices():
     return [{"key": key, "label": label} for key, label in _QR_BADGE_SHAPES.items()]
 
 
+def _qr_frame_choices():
+    return [{"key": key, "label": label} for key, label in _QR_FRAME_STYLES.items()]
+
+
 def _styled_qr_module_drawer(module_style):
     from qrcode.image.styles.moduledrawers.pil import (
         CircleModuleDrawer,
         GappedSquareModuleDrawer,
-        HorizontalBarsDrawer,
         RoundedModuleDrawer,
         SquareModuleDrawer,
-        VerticalBarsDrawer,
     )
 
     module_style = _normalize_qr_module_style(module_style)
@@ -8951,10 +8958,6 @@ def _styled_qr_module_drawer(module_style):
         return CircleModuleDrawer()
     if module_style == "gapped":
         return GappedSquareModuleDrawer()
-    if module_style == "horizontal":
-        return HorizontalBarsDrawer()
-    if module_style == "vertical":
-        return VerticalBarsDrawer()
     return RoundedModuleDrawer()
 
 
@@ -8986,104 +8989,8 @@ def _make_styled_qr_image(qr_record, tracking_url, size):
     return qr_img.resize((size, size), Image.Resampling.NEAREST)
 
 
-def _draw_qr_badge_icon(draw, shape, box, fill, accent):
-    left, top, right, bottom = box
-    width = right - left
-    height = bottom - top
-    cx = left + width / 2
-    cy = top + height / 2
-    shape = _normalize_qr_badge_shape(shape)
-    fill = _normalize_qr_color(fill, "#111827")
-    accent = _normalize_qr_color(accent, "#0f766e")
-
-    if shape == "paw":
-        toe_r = width * 0.11
-        for tx, ty in [
-            (cx - width * 0.24, top + height * 0.28),
-            (cx - width * 0.08, top + height * 0.18),
-            (cx + width * 0.08, top + height * 0.18),
-            (cx + width * 0.24, top + height * 0.28),
-        ]:
-            draw.ellipse((tx - toe_r, ty - toe_r, tx + toe_r, ty + toe_r), fill=fill)
-        draw.ellipse((cx - width * 0.28, cy - height * 0.04, cx + width * 0.28, cy + height * 0.36), fill=fill)
-        return
-
-    if shape == "bone":
-        draw.rounded_rectangle(
-            (left + width * 0.18, cy - height * 0.13, right - width * 0.18, cy + height * 0.13),
-            radius=int(width * 0.08),
-            fill=fill,
-        )
-        r = width * 0.16
-        for tx, ty in [
-            (left + width * 0.2, cy - height * 0.14),
-            (left + width * 0.2, cy + height * 0.14),
-            (right - width * 0.2, cy - height * 0.14),
-            (right - width * 0.2, cy + height * 0.14),
-        ]:
-            draw.ellipse((tx - r, ty - r, tx + r, ty + r), fill=fill)
-        return
-
-    if shape == "poop":
-        poop_fill = "#7c2d12"
-        draw.ellipse((left + width * 0.18, top + height * 0.56, right - width * 0.18, bottom - height * 0.08), fill=poop_fill)
-        draw.ellipse((left + width * 0.26, top + height * 0.36, right - width * 0.24, bottom - height * 0.26), fill=poop_fill)
-        draw.ellipse((left + width * 0.36, top + height * 0.18, right - width * 0.34, bottom - height * 0.48), fill=poop_fill)
-        draw.polygon(
-            [
-                (cx - width * 0.05, top + height * 0.12),
-                (cx + width * 0.16, top + height * 0.28),
-                (cx - width * 0.02, top + height * 0.34),
-            ],
-            fill=poop_fill,
-        )
-        return
-
-    if shape == "home":
-        draw.polygon(
-            [(cx, top + height * 0.15), (left + width * 0.16, cy), (right - width * 0.16, cy)],
-            fill=fill,
-        )
-        draw.rounded_rectangle(
-            (left + width * 0.26, cy - height * 0.02, right - width * 0.26, bottom - height * 0.14),
-            radius=int(width * 0.04),
-            fill=fill,
-        )
-        return
-
-    if shape == "star":
-        points = []
-        for i in range(10):
-            angle = -90 + i * 36
-            radius = width * (0.36 if i % 2 == 0 else 0.16)
-            x = cx + radius * math.cos(math.radians(angle))
-            y = cy + radius * math.sin(math.radians(angle))
-            points.append((x, y))
-        draw.polygon(points, fill=accent)
-        return
-
-    if shape == "heart":
-        draw.ellipse((left + width * 0.18, top + height * 0.18, cx + width * 0.04, cy + height * 0.1), fill=fill)
-        draw.ellipse((cx - width * 0.04, top + height * 0.18, right - width * 0.18, cy + height * 0.1), fill=fill)
-        draw.polygon(
-            [(left + width * 0.16, cy), (right - width * 0.16, cy), (cx, bottom - height * 0.14)],
-            fill=fill,
-        )
-        return
-
-    if shape == "wrench":
-        draw.line((left + width * 0.25, bottom - height * 0.22, right - width * 0.22, top + height * 0.25), fill=fill, width=max(8, int(width * 0.12)))
-        draw.ellipse((right - width * 0.35, top + height * 0.12, right - width * 0.08, top + height * 0.39), outline=fill, width=max(7, int(width * 0.08)))
-        draw.ellipse((left + width * 0.16, bottom - height * 0.32, left + width * 0.36, bottom - height * 0.12), fill=accent)
-        return
-
-    if shape == "leaf":
-        draw.ellipse((left + width * 0.2, top + height * 0.16, right - width * 0.16, bottom - height * 0.16), fill=accent)
-        draw.line((left + width * 0.32, bottom - height * 0.22, right - width * 0.25, top + height * 0.25), fill="#ffffff", width=max(4, int(width * 0.04)))
-
-
 def _apply_qr_badge(qr_img, qr_record, brand):
-    from PIL import ImageDraw
+    from PIL import ImageDraw, ImageFont
 
     badge_shape = _normalize_qr_badge_shape(qr_record.get("badge_shape"))
     if badge_shape == "none":
@@ -9100,6 +9007,8 @@ def _apply_qr_badge(qr_img, qr_record, brand):
     pad = max(10, int(size * 0.025))
     foreground = _normalize_qr_color(qr_record.get("foreground_color"), "#111827")
     accent = _normalize_qr_color((brand or {}).get("brand_primary_color") or foreground, foreground)
+    brand_name = _brand_field(brand, "display_name", "name") or "W"
+    initials = "".join(part[0] for part in re.findall(r"[A-Za-z0-9]+", brand_name)[:2]).upper() or "W"
 
     draw.rounded_rectangle(
         (left - pad, top - pad, right + pad, bottom + pad),
@@ -9108,7 +9017,24 @@ def _apply_qr_badge(qr_img, qr_record, brand):
         outline=accent,
         width=max(4, int(size * 0.01)),
     )
-    _draw_qr_badge_icon(draw, badge_shape, (left, top, right, bottom), foreground, accent)
+    draw.rounded_rectangle(
+        (left + pad // 2, top + pad // 2, right - pad // 2, bottom - pad // 2),
+        radius=max(10, int(badge_size * 0.13)),
+        fill=foreground,
+    )
+    try:
+        badge_font = ImageFont.truetype("arialbd.ttf", max(34, int(badge_size * 0.36)))
+    except Exception:
+        badge_font = ImageFont.load_default()
+    text_bbox = draw.textbbox((0, 0), initials[:2], font=badge_font)
+    text_w = text_bbox[2] - text_bbox[0]
+    text_h = text_bbox[3] - text_bbox[1]
+    draw.text(
+        (left + (badge_size - text_w) / 2, top + (badge_size - text_h) / 2 - int(badge_size * 0.04)),
+        initials[:2],
+        font=badge_font,
+        fill="#ffffff",
+    )
     return qr_img
 
 
@@ -9117,38 +9043,120 @@ def _render_branded_qr_png(qr_record, tracking_url, brand):
 
     foreground = _normalize_qr_color(qr_record.get("foreground_color"), "#111827")
     background = _normalize_qr_color(qr_record.get("background_color"), "#ffffff")
-    qr_img = _make_styled_qr_image(qr_record, tracking_url, 720)
-    qr_img = _apply_qr_badge(qr_img, qr_record, brand)
-
-    canvas_w = 900
-    canvas_h = 1060
-    canvas = Image.new("RGB", (canvas_w, canvas_h), background)
-    draw = ImageDraw.Draw(canvas)
     accent = _normalize_qr_color((brand or {}).get("brand_primary_color") or foreground, foreground)
-
-    draw.rounded_rectangle((40, 40, canvas_w - 40, canvas_h - 40), radius=32, outline=accent, width=8)
-    qr_x = (canvas_w - qr_img.width) // 2
-    canvas.paste(qr_img, (qr_x, 100))
-
-    try:
-        title_font = ImageFont.truetype("arialbd.ttf", 42)
-        small_font = ImageFont.truetype("arial.ttf", 28)
-    except Exception:
-        title_font = ImageFont.load_default()
-        small_font = ImageFont.load_default()
-
+    frame_style = _normalize_qr_frame_style(qr_record.get("frame_style"))
     frame_text = (qr_record.get("frame_text") or "").strip()[:80] or "Scan to open"
     brand_name = ((brand or {}).get("display_name") or (brand or {}).get("name") or "").strip()[:70]
+
+    frame_sizes = {
+        "clean": (940, 1120, 720),
+        "card": (1040, 1320, 720),
+        "label": (1500, 900, 620),
+        "ticket": (1500, 780, 560),
+        "arch": (1000, 1320, 680),
+    }
+    canvas_w, canvas_h, qr_size = frame_sizes.get(frame_style, frame_sizes["card"])
+    qr_img = _make_styled_qr_image(qr_record, tracking_url, qr_size)
+    qr_img = _apply_qr_badge(qr_img, qr_record, brand)
+
+    try:
+        title_font = ImageFont.truetype("arialbd.ttf", 48)
+        large_font = ImageFont.truetype("arialbd.ttf", 64)
+        small_font = ImageFont.truetype("arial.ttf", 28)
+        meta_font = ImageFont.truetype("arialbd.ttf", 24)
+    except Exception:
+        title_font = ImageFont.load_default()
+        large_font = ImageFont.load_default()
+        small_font = ImageFont.load_default()
+        meta_font = ImageFont.load_default()
 
     def center_text(text, y, font, fill):
         bbox = draw.textbbox((0, 0), text, font=font)
         x = (canvas_w - (bbox[2] - bbox[0])) // 2
         draw.text((x, y), text, font=font, fill=fill)
 
-    center_text(frame_text, 845, title_font, foreground)
-    if brand_name:
-        center_text(brand_name, 910, small_font, foreground)
-    center_text("Tracked by W.A.R.R.E.N.", 970, small_font, "#64748b")
+    def draw_right_text(text, xy, font, fill, max_width):
+        x, y = xy
+        words = re.sub(r"\s+", " ", text or "").strip().split()
+        lines = []
+        current = ""
+        for word in words:
+            candidate = f"{current} {word}".strip()
+            bbox = draw.textbbox((0, 0), candidate, font=font)
+            if current and bbox[2] - bbox[0] > max_width:
+                lines.append(current)
+                current = word
+            else:
+                current = candidate
+        if current:
+            lines.append(current)
+        for line in lines[:3]:
+            draw.text((x, y), line, font=font, fill=fill)
+            bbox = draw.textbbox((0, 0), line, font=font)
+            y += bbox[3] - bbox[1] + 12
+        return y
+
+    if frame_style == "label":
+        canvas = Image.new("RGB", (canvas_w, canvas_h), "#f8fafc")
+        draw = ImageDraw.Draw(canvas)
+        draw.rounded_rectangle((54, 80, canvas_w - 54, canvas_h - 80), radius=92, fill=background, outline="#dbe3ea", width=4)
+        draw.rounded_rectangle((96, 122, 96 + qr_size + 52, 122 + qr_size + 52), radius=44, fill="#ffffff", outline=accent, width=8)
+        canvas.paste(qr_img, (122, 148))
+        text_x = 820
+        draw.text((text_x, 188), brand_name or "W.A.R.R.E.N.", font=meta_font, fill=accent)
+        draw_right_text(frame_text, (text_x, 250), large_font, foreground, 560)
+        draw.text((text_x, 560), "Tracked QR redirect", font=small_font, fill="#64748b")
+        draw.rounded_rectangle((text_x, 620, text_x + 420, 690), radius=35, fill=foreground)
+        draw.text((text_x + 38, 640), "SCAN WITH PHONE", font=meta_font, fill="#ffffff")
+
+    elif frame_style == "ticket":
+        canvas = Image.new("RGB", (canvas_w, canvas_h), "#eef2f7")
+        draw = ImageDraw.Draw(canvas)
+        draw.rounded_rectangle((60, 60, canvas_w - 60, canvas_h - 60), radius=52, fill=background, outline="#cbd5e1", width=4)
+        for cy in (60, canvas_h - 60):
+            draw.ellipse((canvas_w * 0.56 - 26, cy - 26, canvas_w * 0.56 + 26, cy + 26), fill="#eef2f7")
+        draw.line((canvas_w * 0.56, 112, canvas_w * 0.56, canvas_h - 112), fill="#cbd5e1", width=4)
+        draw.rounded_rectangle((128, 108, 128 + qr_size + 44, 108 + qr_size + 44), radius=32, fill="#ffffff", outline=accent, width=7)
+        canvas.paste(qr_img, (150, 130))
+        text_x = int(canvas_w * 0.62)
+        draw.text((text_x, 148), brand_name or "W.A.R.R.E.N.", font=meta_font, fill=accent)
+        draw_right_text(frame_text, (text_x, 212), title_font, foreground, 440)
+        draw.text((text_x, canvas_h - 220), "SCAN TO OPEN", font=large_font, fill=foreground)
+        draw.text((text_x, canvas_h - 130), "Tracked by W.A.R.R.E.N.", font=small_font, fill="#64748b")
+
+    elif frame_style == "arch":
+        canvas = Image.new("RGB", (canvas_w, canvas_h), background)
+        draw = ImageDraw.Draw(canvas)
+        draw.rounded_rectangle((70, 170, canvas_w - 70, canvas_h - 70), radius=52, fill="#ffffff", outline="#dbe3ea", width=4)
+        draw.ellipse((70, 35, canvas_w - 70, 365), fill=foreground)
+        center_text(brand_name or "W.A.R.R.E.N.", 116, meta_font, "#ffffff")
+        center_text(frame_text, 235, title_font, "#ffffff")
+        draw.rounded_rectangle((140, 420, canvas_w - 140, 420 + qr_size + 60), radius=44, fill="#ffffff", outline=accent, width=8)
+        canvas.paste(qr_img, ((canvas_w - qr_size) // 2, 450))
+        center_text("Tracked by W.A.R.R.E.N.", canvas_h - 140, small_font, "#64748b")
+
+    elif frame_style == "clean":
+        canvas = Image.new("RGB", (canvas_w, canvas_h), background)
+        draw = ImageDraw.Draw(canvas)
+        draw.rounded_rectangle((40, 40, canvas_w - 40, canvas_h - 40), radius=32, outline=accent, width=8)
+        canvas.paste(qr_img, ((canvas_w - qr_size) // 2, 100))
+        center_text(frame_text, 845, title_font, foreground)
+        if brand_name:
+            center_text(brand_name, 914, small_font, foreground)
+        center_text("Tracked by W.A.R.R.E.N.", 980, small_font, "#64748b")
+
+    else:
+        canvas = Image.new("RGB", (canvas_w, canvas_h), "#f8fafc")
+        draw = ImageDraw.Draw(canvas)
+        draw.rounded_rectangle((64, 64, canvas_w - 64, canvas_h - 64), radius=58, fill=background, outline="#dbe3ea", width=4)
+        draw.rounded_rectangle((64, 64, canvas_w - 64, 262), radius=58, fill=foreground)
+        draw.rectangle((64, 164, canvas_w - 64, 262), fill=foreground)
+        center_text(brand_name or "W.A.R.R.E.N.", 116, meta_font, "#ffffff")
+        center_text(frame_text, 188, title_font, "#ffffff")
+        draw.rounded_rectangle((122, 332, canvas_w - 122, 332 + qr_size + 70), radius=46, fill="#ffffff", outline=accent, width=8)
+        canvas.paste(qr_img, ((canvas_w - qr_size) // 2, 367))
+        draw.rounded_rectangle((250, canvas_h - 170, canvas_w - 250, canvas_h - 96), radius=37, fill=foreground)
+        center_text("SCAN WITH PHONE", canvas_h - 150, meta_font, "#ffffff")
 
     out = BytesIO()
     canvas.save(out, format="PNG")
@@ -9397,14 +9405,17 @@ def client_qr_studio():
         item["last_scanned_at"] = summary.get("last_scanned_at") or item.get("last_scanned_at") or ""
         item["module_style"] = _normalize_qr_module_style(item.get("module_style"))
         item["badge_shape"] = _normalize_qr_badge_shape(item.get("badge_shape"))
+        item["frame_style"] = _normalize_qr_frame_style(item.get("frame_style"))
         item["module_style_label"] = _QR_MODULE_STYLES.get(item["module_style"], "Rounded")
-        item["badge_shape_label"] = _QR_BADGE_SHAPES.get(item["badge_shape"], "No Badge")
+        item["badge_shape_label"] = _QR_BADGE_SHAPES.get(item["badge_shape"], "No Center Mark")
+        item["frame_style_label"] = _QR_FRAME_STYLES.get(item["frame_style"], "Premium Card")
     return render_template(
         "client_qr_studio.html",
         brand=brand,
         qr_codes=qr_codes,
         module_styles=_qr_style_choices(),
         badge_shapes=_qr_badge_choices(),
+        frame_styles=_qr_frame_choices(),
         brand_name=session.get("client_brand_name", brand.get("display_name", "")),
     )
 
@@ -9429,6 +9440,7 @@ def client_qr_studio_create():
     frame_text = (request.form.get("frame_text") or "").strip()[:80]
     module_style = _normalize_qr_module_style(request.form.get("module_style"))
     badge_shape = _normalize_qr_badge_shape(request.form.get("badge_shape"))
+    frame_style = _normalize_qr_frame_style(request.form.get("frame_style"))
     created_by = session.get("client_user_email") or session.get("client_brand_name") or ""
     slug = _new_qr_tracking_slug(db)
     db.create_qr_code(
@@ -9441,6 +9453,7 @@ def client_qr_studio_create():
         frame_text=frame_text,
         module_style=module_style,
         badge_shape=badge_shape,
+        frame_style=frame_style,
         created_by=created_by,
     )
     flash("Tracked QR code created.", "success")
