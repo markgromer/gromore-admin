@@ -13,6 +13,7 @@ import time
 import threading
 import logging
 import uuid
+import secrets
 import zipfile
 import csv
 import hashlib
@@ -8854,6 +8855,199 @@ def _image_creator_prompt(
         if context_bits:
             parts.append("Brand context: " + "; ".join(context_bits[:5]) + ".")
     return "\n".join(parts)
+
+
+def _normalize_qr_color(value, fallback):
+    value = (value or "").strip()
+    if re.match(r"^#[0-9a-fA-F]{6}$", value):
+        return value.lower()
+    return fallback
+
+
+def _normalize_tracking_url(raw_url):
+    value = (raw_url or "").strip()
+    if not value:
+        return ""
+    if not re.match(r"^https?://", value, re.IGNORECASE):
+        value = "https://" + value
+    parsed = urlparse(value)
+    if parsed.scheme not in ("http", "https") or not parsed.netloc:
+        return ""
+    return value
+
+
+def _qr_tracking_url(tracking_slug):
+    return url_for("client_public.public_qr_redirect", tracking_slug=tracking_slug, _external=True)
+
+
+def _new_qr_tracking_slug(db):
+    for _ in range(12):
+        slug = secrets.token_urlsafe(8).replace("-", "").replace("_", "")[:10]
+        if not db.get_qr_code_by_slug(slug):
+            return slug
+    return secrets.token_urlsafe(12).replace("-", "").replace("_", "")[:16]
+
+
+def _hash_qr_ip(ip_value):
+    secret = current_app.config.get("SECRET_KEY") or os.environ.get("SECRET_KEY") or "warren"
+    return hashlib.sha256(f"{secret}:{ip_value or ''}".encode("utf-8")).hexdigest()[:32]
+
+
+def _render_branded_qr_png(qr_record, tracking_url, brand):
+    import qrcode
+    from PIL import Image, ImageDraw, ImageFont
+
+    foreground = _normalize_qr_color(qr_record.get("foreground_color"), "#111827")
+    background = _normalize_qr_color(qr_record.get("background_color"), "#ffffff")
+    qr = qrcode.QRCode(
+        version=None,
+        error_correction=qrcode.constants.ERROR_CORRECT_H,
+        box_size=18,
+        border=4,
+    )
+    qr.add_data(tracking_url)
+    qr.make(fit=True)
+    qr_img = qr.make_image(fill_color=foreground, back_color=background).convert("RGB")
+    qr_img = qr_img.resize((720, 720), Image.Resampling.NEAREST)
+
+    canvas_w = 900
+    canvas_h = 1060
+    canvas = Image.new("RGB", (canvas_w, canvas_h), background)
+    draw = ImageDraw.Draw(canvas)
+    accent = _normalize_qr_color((brand or {}).get("brand_primary_color") or foreground, foreground)
+
+    draw.rounded_rectangle((40, 40, canvas_w - 40, canvas_h - 40), radius=32, outline=accent, width=8)
+    qr_x = (canvas_w - qr_img.width) // 2
+    canvas.paste(qr_img, (qr_x, 100))
+
+    try:
+        title_font = ImageFont.truetype("arialbd.ttf", 42)
+        small_font = ImageFont.truetype("arial.ttf", 28)
+    except Exception:
+        title_font = ImageFont.load_default()
+        small_font = ImageFont.load_default()
+
+    frame_text = (qr_record.get("frame_text") or "").strip()[:80] or "Scan to open"
+    brand_name = ((brand or {}).get("display_name") or (brand or {}).get("name") or "").strip()[:70]
+
+    def center_text(text, y, font, fill):
+        bbox = draw.textbbox((0, 0), text, font=font)
+        x = (canvas_w - (bbox[2] - bbox[0])) // 2
+        draw.text((x, y), text, font=font, fill=fill)
+
+    center_text(frame_text, 845, title_font, foreground)
+    if brand_name:
+        center_text(brand_name, 910, small_font, foreground)
+    center_text("Tracked by W.A.R.R.E.N.", 970, small_font, "#64748b")
+
+    out = BytesIO()
+    canvas.save(out, format="PNG")
+    out.seek(0)
+    return out
+
+
+@client_bp.route("/qr-studio")
+@client_login_required
+def client_qr_studio():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        abort(404)
+    qr_codes = db.get_qr_codes(brand_id)
+    summaries = db.get_qr_scan_summary(brand_id)
+    for item in qr_codes:
+        summary = summaries.get(int(item["id"]), {})
+        item["tracking_url"] = _qr_tracking_url(item["tracking_slug"])
+        item["scan_count"] = int(summary.get("scan_count") or item.get("scans") or 0)
+        item["last_scanned_at"] = summary.get("last_scanned_at") or item.get("last_scanned_at") or ""
+    return render_template(
+        "client_qr_studio.html",
+        brand=brand,
+        qr_codes=qr_codes,
+        brand_name=session.get("client_brand_name", brand.get("display_name", "")),
+    )
+
+
+@client_bp.route("/qr-studio", methods=["POST"])
+@client_login_required
+def client_qr_studio_create():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        abort(404)
+
+    name = (request.form.get("name") or "").strip()[:120] or "QR Code"
+    target_url = _normalize_tracking_url(request.form.get("target_url"))
+    if not target_url:
+        flash("Paste a valid URL for the QR code.", "warning")
+        return redirect(url_for("client.client_qr_studio"))
+
+    foreground = _normalize_qr_color(request.form.get("foreground_color"), (brand.get("brand_primary_color") or "#111827"))
+    background = _normalize_qr_color(request.form.get("background_color"), "#ffffff")
+    frame_text = (request.form.get("frame_text") or "").strip()[:80]
+    created_by = session.get("client_user_email") or session.get("client_brand_name") or ""
+    slug = _new_qr_tracking_slug(db)
+    db.create_qr_code(
+        brand_id,
+        name,
+        target_url,
+        slug,
+        foreground_color=foreground,
+        background_color=background,
+        frame_text=frame_text,
+        created_by=created_by,
+    )
+    flash("Tracked QR code created.", "success")
+    return redirect(url_for("client.client_qr_studio"))
+
+
+@client_bp.route("/qr-studio/<int:qr_id>/png")
+@client_login_required
+def client_qr_studio_png(qr_id):
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    qr_record = db.get_qr_code(qr_id, brand_id)
+    if not brand or not qr_record:
+        abort(404)
+    img = _render_branded_qr_png(qr_record, _qr_tracking_url(qr_record["tracking_slug"]), brand)
+    filename = re.sub(r"[^a-zA-Z0-9_-]+", "-", qr_record.get("name") or "qr-code").strip("-").lower() or "qr-code"
+    return send_file(
+        img,
+        mimetype="image/png",
+        as_attachment=bool(request.args.get("download")),
+        download_name=f"{filename}.png",
+    )
+
+
+@client_bp.route("/qr-studio/<int:qr_id>/delete", methods=["POST"])
+@client_login_required
+def client_qr_studio_delete(qr_id):
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    db.update_qr_code(qr_id, brand_id, active=0)
+    flash("QR code archived.", "success")
+    return redirect(url_for("client.client_qr_studio"))
+
+
+@client_public_bp.route("/q/<tracking_slug>")
+def public_qr_redirect(tracking_slug):
+    db = _get_db()
+    qr_record = db.get_qr_code_by_slug(tracking_slug)
+    if not qr_record:
+        abort(404)
+    forwarded = request.headers.get("X-Forwarded-For", "").split(",", 1)[0].strip()
+    ip_value = forwarded or request.remote_addr or ""
+    db.record_qr_scan(
+        qr_record["id"],
+        qr_record["brand_id"],
+        ip_hash=_hash_qr_ip(ip_value),
+        user_agent=request.headers.get("User-Agent", ""),
+        referer=request.headers.get("Referer", ""),
+    )
+    return redirect(qr_record["target_url"], code=302)
 
 
 @client_bp.route("/image-creator")

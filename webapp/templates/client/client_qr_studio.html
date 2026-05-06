@@ -1,0 +1,165 @@
+{% extends "client_base.html" %}
+{% block title %}QR Studio{% endblock %}
+
+{% block content %}
+<style>
+.qr-studio-shell {
+    display: grid;
+    grid-template-columns: minmax(280px, 420px) minmax(0, 1fr);
+    gap: 18px;
+}
+.qr-panel {
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    background: #fff;
+    box-shadow: 0 8px 22px rgba(15, 23, 42, 0.05);
+}
+.qr-panel .panel-body {
+    padding: 18px;
+}
+.qr-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 14px;
+}
+.qr-item {
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    background: #fff;
+    overflow: hidden;
+}
+.qr-preview {
+    background: #f8fafc;
+    border-bottom: 1px solid #e5e7eb;
+    min-height: 220px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.qr-preview img {
+    width: min(210px, 80%);
+    height: auto;
+}
+.qr-url {
+    font-size: .78rem;
+    color: #475569;
+    word-break: break-all;
+}
+.qr-stat {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border-radius: 999px;
+    background: #ecfeff;
+    color: #115e59;
+    padding: 6px 10px;
+    font-size: .8rem;
+    font-weight: 700;
+}
+@media (max-width: 991px) {
+    .qr-studio-shell {
+        grid-template-columns: 1fr;
+    }
+}
+</style>
+
+<div class="page-title-bar d-flex flex-wrap justify-content-between align-items-start gap-3">
+    <div>
+        <h5><i class="bi bi-qr-code"></i>QR Studio</h5>
+        <p>Create branded QR codes for print materials, leave-behinds, cards, signs, wraps, and takeaways. Every scan redirects through WARREN so performance is tracked.</p>
+    </div>
+    <a href="{{ url_for('client.client_creative') }}" class="btn btn-outline-secondary">
+        <i class="bi bi-palette me-1"></i> Creative Studio
+    </a>
+</div>
+
+<div class="qr-studio-shell">
+    <div class="qr-panel">
+        <div class="panel-body">
+            <h6 class="fw-semibold mb-2">Create QR Code</h6>
+            <form method="POST" action="{{ url_for('client.client_qr_studio_create') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="mb-3">
+                    <label class="form-label fw-medium">Name</label>
+                    <input class="form-control" name="name" maxlength="120" placeholder="Review request card">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-medium">Destination URL</label>
+                    <input class="form-control" name="target_url" required placeholder="https://example.com/reviews">
+                    <small class="text-muted">The QR code points to a WARREN tracking URL, then redirects here.</small>
+                </div>
+                <div class="row g-2">
+                    <div class="col-6">
+                        <label class="form-label fw-medium">QR Color</label>
+                        <input type="color" class="form-control form-control-color w-100" name="foreground_color" value="{{ brand.brand_primary_color or '#111827' }}">
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label fw-medium">Background</label>
+                        <input type="color" class="form-control form-control-color w-100" name="background_color" value="#ffffff">
+                    </div>
+                </div>
+                <div class="mt-3">
+                    <label class="form-label fw-medium">Frame Text</label>
+                    <input class="form-control" name="frame_text" maxlength="80" placeholder="Scan for a free quote">
+                </div>
+                <button class="btn btn-primary w-100 mt-3" type="submit">
+                    <i class="bi bi-plus-circle me-1"></i> Generate Tracked QR
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <div>
+        {% if qr_codes %}
+        <div class="qr-grid">
+            {% for qr in qr_codes %}
+            <div class="qr-item">
+                <div class="qr-preview">
+                    <img src="{{ url_for('client.client_qr_studio_png', qr_id=qr.id) }}" alt="{{ qr.name }} QR code">
+                </div>
+                <div class="p-3">
+                    <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
+                        <div>
+                            <h6 class="mb-1">{{ qr.name }}</h6>
+                            <div class="qr-stat"><i class="bi bi-phone-vibrate"></i>{{ qr.scan_count }} scans</div>
+                        </div>
+                        <form method="POST" action="{{ url_for('client.client_qr_studio_delete', qr_id=qr.id) }}" onsubmit="return confirm('Archive this QR code? Existing printed codes will stop redirecting.');">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button class="btn btn-sm btn-outline-danger" type="submit" title="Archive"><i class="bi bi-trash"></i></button>
+                        </form>
+                    </div>
+                    <div class="mb-2">
+                        <div class="text-muted" style="font-size:.78rem;">Tracking URL</div>
+                        <div class="qr-url">{{ qr.tracking_url }}</div>
+                    </div>
+                    <div class="mb-3">
+                        <div class="text-muted" style="font-size:.78rem;">Destination</div>
+                        <div class="qr-url">{{ qr.target_url }}</div>
+                    </div>
+                    <div class="d-flex flex-wrap gap-2">
+                        <a class="btn btn-sm btn-primary" href="{{ url_for('client.client_qr_studio_png', qr_id=qr.id, download=1) }}">
+                            <i class="bi bi-download me-1"></i> PNG
+                        </a>
+                        <a class="btn btn-sm btn-outline-secondary" href="{{ qr.tracking_url }}" target="_blank" rel="noopener">
+                            <i class="bi bi-box-arrow-up-right me-1"></i> Test
+                        </a>
+                    </div>
+                    {% if qr.last_scanned_at %}
+                    <small class="text-muted d-block mt-2">Last scan: {{ qr.last_scanned_at[:16] }}</small>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="qr-panel">
+            <div class="panel-body text-center py-5">
+                <i class="bi bi-qr-code" style="font-size:3rem; color:#94a3b8;"></i>
+                <h6 class="mt-3 mb-1">No QR codes yet</h6>
+                <p class="text-muted mb-0">Create your first tracked QR for a business card, yard sign, flyer, or review card.</p>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

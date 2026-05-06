@@ -395,6 +395,9 @@
             <a href="{{ url_for('client.client_image_creator') }}" class="{% if request.endpoint in ('client.client_image_creator', 'client.client_image_creator_generate') %}active{% endif %}">
                 <i class="bi bi-image"></i> <span class="nav-link-label">Image Creator</span>
             </a>
+            <a href="{{ url_for('client.client_qr_studio') }}" class="{% if request.endpoint in ('client.client_qr_studio', 'client.client_qr_studio_create', 'client.client_qr_studio_png', 'client.client_qr_studio_delete') %}active{% endif %}">
+                <i class="bi bi-qr-code"></i> <span class="nav-link-label">QR Studio</span>
+            </a>
             {% endif %}
             {% if feature_on('blog') %}
             <a href="{{ url_for('client.client_blog') }}" class="{% if request.endpoint in ('client.client_blog', 'client.client_blog_editor') %}active{% endif %}">

@@ -789,6 +789,47 @@ class WebDB:
             );
         """)
         conn.execute("""
+            CREATE TABLE IF NOT EXISTS qr_codes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                brand_id INTEGER NOT NULL,
+                name TEXT NOT NULL DEFAULT 'Untitled QR Code',
+                target_url TEXT NOT NULL,
+                tracking_slug TEXT NOT NULL UNIQUE,
+                foreground_color TEXT NOT NULL DEFAULT '#111827',
+                background_color TEXT NOT NULL DEFAULT '#ffffff',
+                frame_text TEXT NOT NULL DEFAULT '',
+                scans INTEGER NOT NULL DEFAULT 0,
+                last_scanned_at TEXT NOT NULL DEFAULT '',
+                active INTEGER NOT NULL DEFAULT 1,
+                created_by TEXT NOT NULL DEFAULT '',
+                created_at TEXT DEFAULT (datetime('now')),
+                updated_at TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (brand_id) REFERENCES brands(id) ON DELETE CASCADE
+            );
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS qr_code_scans (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                qr_code_id INTEGER NOT NULL,
+                brand_id INTEGER NOT NULL,
+                ip_hash TEXT NOT NULL DEFAULT '',
+                user_agent TEXT NOT NULL DEFAULT '',
+                referer TEXT NOT NULL DEFAULT '',
+                scanned_at TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (qr_code_id) REFERENCES qr_codes(id) ON DELETE CASCADE,
+                FOREIGN KEY (brand_id) REFERENCES brands(id) ON DELETE CASCADE
+            );
+        """)
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_qr_codes_brand_active
+            ON qr_codes(brand_id, active, updated_at);
+        """)
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_qr_code_scans_qr_time
+            ON qr_code_scans(qr_code_id, scanned_at);
+        """)
+
+        conn.execute("""
             CREATE INDEX IF NOT EXISTS idx_creative_tool_references_brand
             ON creative_tool_references(brand_id, is_active, created_at DESC);
         """)
@@ -5425,6 +5466,126 @@ class WebDB:
         conn.close()
 
     # ── Settings ──
+
+    # QR Studio
+
+    def create_qr_code(self, brand_id, name, target_url, tracking_slug,
+                       foreground_color="#111827", background_color="#ffffff",
+                       frame_text="", created_by=""):
+        conn = self._conn()
+        conn.execute(
+            """INSERT INTO qr_codes (
+                   brand_id, name, target_url, tracking_slug, foreground_color,
+                   background_color, frame_text, created_by
+               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                brand_id,
+                name,
+                target_url,
+                tracking_slug,
+                foreground_color,
+                background_color,
+                frame_text,
+                created_by,
+            ),
+        )
+        conn.commit()
+        qr_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+        conn.close()
+        return int(qr_id)
+
+    def get_qr_codes(self, brand_id, include_inactive=False):
+        conn = self._conn()
+        if include_inactive:
+            rows = conn.execute(
+                "SELECT * FROM qr_codes WHERE brand_id = ? ORDER BY updated_at DESC",
+                (brand_id,),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT * FROM qr_codes WHERE brand_id = ? AND active = 1 ORDER BY updated_at DESC",
+                (brand_id,),
+            ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    def get_qr_code(self, qr_id, brand_id=None):
+        conn = self._conn()
+        if brand_id is None:
+            row = conn.execute("SELECT * FROM qr_codes WHERE id = ?", (qr_id,)).fetchone()
+        else:
+            row = conn.execute(
+                "SELECT * FROM qr_codes WHERE id = ? AND brand_id = ?",
+                (qr_id, brand_id),
+            ).fetchone()
+        conn.close()
+        return dict(row) if row else None
+
+    def get_qr_code_by_slug(self, tracking_slug):
+        conn = self._conn()
+        row = conn.execute(
+            "SELECT * FROM qr_codes WHERE tracking_slug = ? AND active = 1",
+            (tracking_slug,),
+        ).fetchone()
+        conn.close()
+        return dict(row) if row else None
+
+    def update_qr_code(self, qr_id, brand_id, *, name=None, target_url=None,
+                       foreground_color=None, background_color=None, frame_text=None,
+                       active=None):
+        fields = ["updated_at = datetime('now')"]
+        values = []
+        updates = {
+            "name": name,
+            "target_url": target_url,
+            "foreground_color": foreground_color,
+            "background_color": background_color,
+            "frame_text": frame_text,
+            "active": active,
+        }
+        for field_name, value in updates.items():
+            if value is not None:
+                fields.append(f"{field_name} = ?")
+                values.append(value)
+        if len(fields) == 1:
+            return
+        conn = self._conn()
+        conn.execute(
+            f"UPDATE qr_codes SET {', '.join(fields)} WHERE id = ? AND brand_id = ?",
+            (*values, qr_id, brand_id),
+        )
+        conn.commit()
+        conn.close()
+
+    def record_qr_scan(self, qr_code_id, brand_id, ip_hash="", user_agent="", referer=""):
+        conn = self._conn()
+        conn.execute(
+            """INSERT INTO qr_code_scans (qr_code_id, brand_id, ip_hash, user_agent, referer)
+               VALUES (?, ?, ?, ?, ?)""",
+            (qr_code_id, brand_id, ip_hash, user_agent[:500], referer[:500]),
+        )
+        conn.execute(
+            """UPDATE qr_codes
+               SET scans = scans + 1,
+                   last_scanned_at = datetime('now'),
+                   updated_at = datetime('now')
+               WHERE id = ?""",
+            (qr_code_id,),
+        )
+        conn.commit()
+        conn.close()
+
+    def get_qr_scan_summary(self, brand_id):
+        conn = self._conn()
+        rows = conn.execute(
+            """SELECT qr_code_id, COUNT(*) AS scan_count, MAX(scanned_at) AS last_scanned_at
+               FROM qr_code_scans
+               WHERE brand_id = ?
+               GROUP BY qr_code_id""",
+            (brand_id,),
+        ).fetchall()
+        conn.close()
+        return {int(r["qr_code_id"]): dict(r) for r in rows}
 
     def save_creative_font(self, brand_id, display_name, css_family, original_filename, file_path, mime_type, file_size, uploaded_by):
         conn = self._conn()
