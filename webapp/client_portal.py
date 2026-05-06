@@ -9051,38 +9051,26 @@ def _render_branded_qr_png(qr_record, tracking_url, brand):
 
     foreground = _normalize_qr_color(qr_record.get("foreground_color"), "#111827")
     background = _normalize_qr_color(qr_record.get("background_color"), "#ffffff")
-    accent = _normalize_qr_color((brand or {}).get("brand_primary_color") or foreground, foreground)
     frame_style = _normalize_qr_frame_style(qr_record.get("frame_style"))
-    frame_text = (qr_record.get("frame_text") or "").strip()[:80] or "Scan to open"
-    brand_name = ((brand or {}).get("display_name") or (brand or {}).get("name") or "").strip()[:70]
 
     frame_sizes = {
-        "top_tab": (900, 1020, 700),
-        "side_callout": (1280, 760, 540),
-        "bottom_banner": (900, 1040, 700),
-        "ticket": (1500, 780, 560),
-        "corner_tag": (940, 1040, 700),
-        "minimal": (860, 860, 700),
+        "top_tab": (760, 860, 560),
+        "side_callout": (980, 560, 420),
+        "bottom_banner": (760, 900, 560),
+        "ticket": (1060, 560, 410),
+        "corner_tag": (760, 860, 540),
+        "minimal": (760, 760, 600),
     }
     canvas_w, canvas_h, qr_size = frame_sizes.get(frame_style, frame_sizes["top_tab"])
     qr_img = _make_styled_qr_image(qr_record, tracking_url, qr_size)
     qr_img = _apply_qr_badge(qr_img, qr_record, brand)
 
     try:
-        title_font = ImageFont.truetype("arialbd.ttf", 48)
+        title_font = ImageFont.truetype("arialbd.ttf", 46)
         large_font = ImageFont.truetype("arialbd.ttf", 72)
-        small_font = ImageFont.truetype("arial.ttf", 28)
-        meta_font = ImageFont.truetype("arialbd.ttf", 26)
     except Exception:
         title_font = ImageFont.load_default()
         large_font = ImageFont.load_default()
-        small_font = ImageFont.load_default()
-        meta_font = ImageFont.load_default()
-
-    def center_text(text, y, font, fill):
-        bbox = draw.textbbox((0, 0), text, font=font)
-        x = (canvas_w - (bbox[2] - bbox[0])) // 2
-        draw.text((x, y), text, font=font, fill=fill)
 
     def draw_centered_in_rect(text, rect, font, fill):
         left, top, right, bottom = rect
@@ -9097,10 +9085,13 @@ def _render_branded_qr_png(qr_record, tracking_url, brand):
             draw.line((x0, y, x0 + size * 0.34, y + size * 0.38), fill=color, width=max(5, int(size * 0.08)))
             draw.line((x0 + size * 0.34, y + size * 0.38, x0, y + size * 0.76), fill=color, width=max(5, int(size * 0.08)))
 
-    def paste_qr_with_border(x, y, radius=28, border=7):
-        pad = 24
+    def paste_qr_with_border(x, y, radius=18, border=6, pad=18):
+        if border <= 0:
+            canvas.paste(qr_img, (x, y))
+            return
+        frame_pad = pad
         draw.rounded_rectangle(
-            (x - pad, y - pad, x + qr_size + pad, y + qr_size + pad),
+            (x - frame_pad, y - frame_pad, x + qr_size + frame_pad, y + qr_size + frame_pad),
             radius=radius,
             fill="#ffffff",
             outline=foreground,
@@ -9109,65 +9100,62 @@ def _render_branded_qr_png(qr_record, tracking_url, brand):
         canvas.paste(qr_img, (x, y))
 
     if frame_style == "side_callout":
-        canvas = Image.new("RGB", (canvas_w, canvas_h), "#f8fafc")
+        canvas = Image.new("RGB", (canvas_w, canvas_h), background)
         draw = ImageDraw.Draw(canvas)
-        draw.rounded_rectangle((54, 84, 438, 300), radius=24, fill=foreground)
-        draw.text((92, 120), "SCAN", font=title_font, fill="#ffffff")
-        draw.text((92, 180), "ME!", font=large_font, fill="#ffffff")
-        draw_chevrons(300, 138, 86, "#ffffff")
-        paste_qr_with_border(580, 96, radius=34)
-        draw.text((580, 680), brand_name or "Tracked by W.A.R.R.E.N.", font=small_font, fill="#64748b")
+        paste_qr_with_border(510, 70, radius=18, border=7)
+        draw.rounded_rectangle((46, 132, 386, 330), radius=22, fill=foreground)
+        draw.text((80, 160), "SCAN", font=title_font, fill="#ffffff")
+        draw.text((80, 215), "ME!", font=large_font, fill="#ffffff")
+        draw_chevrons(282, 178, 72, "#ffffff")
 
     elif frame_style == "ticket":
-        canvas = Image.new("RGB", (canvas_w, canvas_h), "#eef2f7")
+        canvas = Image.new("RGB", (canvas_w, canvas_h), background)
         draw = ImageDraw.Draw(canvas)
-        draw.rounded_rectangle((60, 60, canvas_w - 60, canvas_h - 60), radius=52, fill=background, outline="#cbd5e1", width=4)
+        draw.rounded_rectangle((40, 40, canvas_w - 40, canvas_h - 40), radius=34, fill=background, outline=foreground, width=7)
         for cy in (60, canvas_h - 60):
-            draw.ellipse((canvas_w * 0.56 - 26, cy - 26, canvas_w * 0.56 + 26, cy + 26), fill="#eef2f7")
-        draw.line((canvas_w * 0.58, 112, canvas_w * 0.58, canvas_h - 112), fill="#cbd5e1", width=4)
-        paste_qr_with_border(138, 110, radius=32)
-        text_x = int(canvas_w * 0.64)
-        draw.rounded_rectangle((text_x, 118, canvas_w - 110, 206), radius=18, fill=foreground)
-        draw_centered_in_rect("SCAN HERE", (text_x, 118, canvas_w - 110, 206), title_font, "#ffffff")
-        draw.text((text_x, 288), frame_text, font=title_font, fill=foreground)
-        draw.text((text_x, 610), brand_name or "Tracked by W.A.R.R.E.N.", font=small_font, fill="#64748b")
+            draw.ellipse((canvas_w * 0.56 - 28, cy - 28, canvas_w * 0.56 + 28, cy + 28), fill="#eef2f7")
+        draw.line((canvas_w * 0.56, 92, canvas_w * 0.56, canvas_h - 92), fill=foreground, width=5)
+        paste_qr_with_border(98, 76, radius=18, border=0)
+        text_x = int(canvas_w * 0.62)
+        draw.rounded_rectangle((text_x, 88, canvas_w - 72, 178), radius=18, fill=foreground)
+        draw_centered_in_rect("SCAN HERE", (text_x, 88, canvas_w - 72, 178), title_font, "#ffffff")
+        draw.text((text_x + 12, 250), "POINT", font=large_font, fill=foreground)
+        draw.text((text_x + 12, 330), "CAMERA", font=large_font, fill=foreground)
 
     elif frame_style == "corner_tag":
-        canvas = Image.new("RGB", (canvas_w, canvas_h), "#f8fafc")
+        canvas = Image.new("RGB", (canvas_w, canvas_h), background)
         draw = ImageDraw.Draw(canvas)
-        draw.rounded_rectangle((80, 80, canvas_w - 80, canvas_h - 80), radius=38, fill=background, outline=foreground, width=8)
-        draw.polygon((canvas_w - 260, 80, canvas_w - 80, 80, canvas_w - 80, 260), fill=foreground)
-        draw.polygon((canvas_w - 260, 80, canvas_w - 260, 260, canvas_w - 80, 260), fill="#e5e7eb")
-        paste_qr_with_border((canvas_w - qr_size) // 2, 160, radius=24, border=0)
-        draw.rounded_rectangle((170, canvas_h - 220, canvas_w - 170, canvas_h - 142), radius=18, fill=foreground)
-        draw_centered_in_rect("SCAN HERE", (170, canvas_h - 220, canvas_w - 170, canvas_h - 142), title_font, "#ffffff")
-        center_text(brand_name or "Tracked by W.A.R.R.E.N.", canvas_h - 115, small_font, "#64748b")
+        draw.rounded_rectangle((78, 86, canvas_w - 78, canvas_h - 86), radius=24, fill=background, outline=foreground, width=8)
+        draw.polygon((canvas_w - 250, 86, canvas_w - 78, 86, canvas_w - 78, 258), fill=foreground)
+        draw.line((canvas_w - 158, 120, canvas_w - 106, 172), fill="#ffffff", width=8)
+        draw.line((canvas_w - 106, 172, canvas_w - 158, 224), fill="#ffffff", width=8)
+        paste_qr_with_border((canvas_w - qr_size) // 2, 166, radius=18, border=0)
+        draw.rounded_rectangle((168, canvas_h - 184, canvas_w - 168, canvas_h - 106), radius=18, fill=foreground)
+        draw_centered_in_rect("SCAN HERE", (168, canvas_h - 184, canvas_w - 168, canvas_h - 106), title_font, "#ffffff")
 
     elif frame_style == "minimal":
         canvas = Image.new("RGB", (canvas_w, canvas_h), background)
         draw = ImageDraw.Draw(canvas)
-        draw.rounded_rectangle((52, 52, canvas_w - 52, canvas_h - 52), radius=34, outline=foreground, width=8)
+        draw.rounded_rectangle((44, 44, canvas_w - 44, canvas_h - 44), radius=28, outline=foreground, width=8)
         canvas.paste(qr_img, ((canvas_w - qr_size) // 2, (canvas_h - qr_size) // 2))
 
     elif frame_style == "bottom_banner":
         canvas = Image.new("RGB", (canvas_w, canvas_h), background)
         draw = ImageDraw.Draw(canvas)
-        paste_qr_with_border((canvas_w - qr_size) // 2, 92, radius=34)
-        draw.rounded_rectangle((100, canvas_h - 190, canvas_w - 100, canvas_h - 96), radius=22, fill=foreground)
-        draw_centered_in_rect("SCAN TO OPEN", (100, canvas_h - 190, canvas_w - 100, canvas_h - 96), title_font, "#ffffff")
-        center_text(brand_name or "Tracked by W.A.R.R.E.N.", canvas_h - 64, small_font, "#64748b")
+        paste_qr_with_border((canvas_w - qr_size) // 2, 74, radius=18, border=7)
+        draw.rounded_rectangle((76, canvas_h - 166, canvas_w - 76, canvas_h - 74), radius=18, fill=foreground)
+        draw_centered_in_rect("SCAN TO OPEN", (76, canvas_h - 166, canvas_w - 76, canvas_h - 74), title_font, "#ffffff")
 
     else:
         canvas = Image.new("RGB", (canvas_w, canvas_h), background)
         draw = ImageDraw.Draw(canvas)
-        tab_w = 420
-        tab_h = 96
+        tab_w = 360
+        tab_h = 88
         tab_x = (canvas_w - tab_w) // 2
-        draw.rounded_rectangle((tab_x, 32, tab_x + tab_w, 32 + tab_h), radius=20, fill=foreground)
+        draw.rounded_rectangle((tab_x, 26, tab_x + tab_w, 26 + tab_h), radius=18, fill=foreground)
         draw_centered_in_rect("SCAN HERE", (tab_x, 32, tab_x + tab_w, 32 + tab_h), title_font, "#ffffff")
-        draw.rounded_rectangle((82, 122, canvas_w - 82, canvas_h - 82), radius=28, outline=foreground, width=8)
-        canvas.paste(qr_img, ((canvas_w - qr_size) // 2, 198))
-        center_text(brand_name or "Tracked by W.A.R.R.E.N.", canvas_h - 58, small_font, "#64748b")
+        draw.rounded_rectangle((76, 104, canvas_w - 76, canvas_h - 76), radius=24, outline=foreground, width=8)
+        canvas.paste(qr_img, ((canvas_w - qr_size) // 2, 170))
 
     out = BytesIO()
     canvas.save(out, format="PNG")
