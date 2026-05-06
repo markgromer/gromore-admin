@@ -5475,7 +5475,6 @@ def _finalize_heatmap_scan(*, keyword, api_key, business_name, grid_points, plac
                            radius_miles=None, center_lat=None, center_lng=None):
     from webapp.heatmap import (
         scan_grid_google_rank_only,
-        scan_grid_local_falcon,
         scan_grid_local_falcon_saved_report,
         summarize_competitor_landscape,
     )
@@ -5506,33 +5505,7 @@ def _finalize_heatmap_scan(*, keyword, api_key, business_name, grid_points, plac
                 local_falcon_error = str(exc)
                 current_app.logger.warning("Local Falcon saved report lookup failed: %s", exc)
 
-            allow_on_demand = str(os.environ.get("LOCAL_FALCON_ALLOW_ON_DEMAND", "")).strip().lower() in {"1", "true", "yes", "on"}
-            if local_falcon_report_miss and allow_on_demand:
-                try:
-                    results, debug_info = scan_grid_local_falcon(
-                        local_falcon_api_key,
-                        keyword,
-                        place_id,
-                        center_lat if center_lat is not None else business_lat,
-                        center_lng if center_lng is not None else business_lng,
-                        grid_size or int(len(grid_points) ** 0.5),
-                        radius_miles or 5,
-                        target_place_ids=target_place_ids,
-                        candidate_names=[business_name, *(alternate_names or [])],
-                    )
-                    debug_info = debug_info or {}
-                    debug_info["local_falcon_source"] = "on_demand"
-                    diagnostics = debug_info.setdefault("api_diagnostics", {})
-                    diagnostics["local_falcon_saved_report"] = {
-                        "provider": "local_falcon_saved_report",
-                        "ok": False,
-                        "error": local_falcon_report_miss,
-                        "fallback": "local_falcon_on_demand",
-                    }
-                except Exception as exc:
-                    local_falcon_error = str(exc)
-                    current_app.logger.warning("Local Falcon scan failed; falling back to Google rank-only: %s", exc)
-            elif local_falcon_report_miss:
+            if local_falcon_report_miss:
                 local_falcon_error = local_falcon_report_miss
 
         if not local_falcon_api_key or local_falcon_error:

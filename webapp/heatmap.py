@@ -625,7 +625,11 @@ def scan_grid_local_falcon_saved_report(api_key, keyword, place_id, grid_size=No
 
 def scan_grid_local_falcon(api_key, keyword, place_id, center_lat, center_lng, grid_size,
                            radius_miles, target_place_ids=None, candidate_names=None):
-    """Run a real Local Falcon Google Maps geo-grid scan and normalize it."""
+    """Run a real Local Falcon Google Maps geo-grid scan and normalize it.
+
+    This is the Local Falcon On-Demand endpoint. The client heatmap flow does
+    not call it; it retrieves saved reports instead.
+    """
     if not api_key:
         raise RuntimeError("Local Falcon API key is not configured.")
     normalized_place_id = _normalize_place_id(place_id)
